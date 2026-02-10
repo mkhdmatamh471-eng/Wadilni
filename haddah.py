@@ -607,7 +607,7 @@ def get_main_kb(role, is_verified=True):
                 await update.message.reply_text(
                     "⚠️ <b>تنبيه: أنت غير مشترك!</b>\n\n"
                     "رؤية روابط العملاء ومراسلتهم ميزة حصرية للمشتركين.\n"
-                    "لتفعيل حسابك، يرجى التواصل مع الإدارة: @x3FreTx",
+                    "لتفعيل حسابك، يرجى التواصل مع الإدارة: @servecest",
                     parse_mode=ParseMode.HTML
                 )
             return # إنهاء الدالة لضمان عدم إرسال رسالة الترحيب العادية
