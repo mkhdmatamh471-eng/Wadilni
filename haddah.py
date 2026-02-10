@@ -573,58 +573,61 @@ def get_main_kb(role, is_verified=True):
 
 
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     first_name = update.effective_user.first_name or "عزيزي"
     
-    # 1. تنظيف الذاكرة
+    # 1. تنظيف بيانات الجلسة المؤقتة وضمان جلب المستخدم
     context.user_data.clear()
-
-    # ✅ التحقق من وجود المستخدم في الكاش أو جلبه من القاعدة (داخل مستوى الدالة)
-    if not (USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id))):
-        await get_user_role(user_id) 
-
-    # 2. جلب بيانات المستخدم من الكاش بعد التحديث
     user = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id))
-    
-    # تحديد حالة التسجيل بناءً على وجود البيانات فعلياً
+
+    if not user:
+        await get_user_role(user_id)
+        user = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id))
+
     is_registered = True if user else False
 
-    # 3. معالجة الدخول العادي (مستخدم مسجل سابقاً)
-    if not context.args and is_registered:
-        # تأكد من استخدام مفتاح 'name' بأمان
-        name_in_db = user.get('name') or first_name
-        await update.message.reply_text(
-            f"👋 مرحباً بك مجدداً يا {name_in_db}", 
-            reply_markup=get_main_kb(user.get('role', 'rider'), user.get('is_verified', False))
-        )
-        return
-
-    # 4. معالجة الروابط العميقة (Deep Linking)
+    # 2. معالجة الروابط العميقة (Deep Linking) أولاً
     if context.args:
         arg_value = context.args[0]
 
-        # --- حالة مراسلة عميل (contact_) تضاف هنا ---
-        if arg_value.startswith("contact_"):
-            customer_id = arg_value.replace("contact_", "")
+        # --- حالة التحقق من الاشتراك (verify_) ---
+        if arg_value.startswith("verify_"):
+            customer_id = arg_value.replace("verify_", "")
             
-            # التحقق: هل الشخص الذي ضغط الزر (السائق) مسجل لدينا ككابتن؟
-            if is_registered and user.get('role') == 'driver':
-                # إنشاء زر يفتح بروفايل الراكب مباشرة
-                profile_button = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👤 فتح بروفايل العميل الآن", url=f"tg://user?id={customer_id}")]
+            # التحقق من حالة الاشتراك من الكاش
+            is_sub = user.get('is_verified', False) if is_registered else False
+            
+            if is_sub:
+                contact_kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("👤 اضغط هنا لمراسلة العميل", url=f"tg://user?id={customer_id}")]
                 ])
-                
                 await update.message.reply_text(
-                    "✅ **جاهز للتوصيل؟**\n"
-                    "اضغط على الزر أدناه لفتح محادثة مع العميل مباشرة، أو اضغط على (بدء المحادثة) في شاشة التليجرام.",
-                    reply_markup=profile_button,
-                    parse_mode=ParseMode.MARKDOWN
+                    "✅ <b>تم التحقق من اشتراكك بنجاح.</b>\n\n"
+                    "يمكنك الآن التواصل مع العميل مباشرة عبر الزر أدناه:",
+                    reply_markup=contact_kb,
+                    parse_mode=ParseMode.HTML
                 )
             else:
-                # إذا كان الشخص غير مسجل أو ليس سائقاً
-                await update.message.reply_text("⚠️ عذراً، هذه الميزة مخصصة للكباتن المسجلين فقط.")
-            return
+                await update.message.reply_text(
+                    "⚠️ <b>عذراً، أنت غير مشترك!</b>\n\n"
+                    "رؤية روابط العملاء متاحة فقط للمشتركين الفعالين.\n"
+                    "يرجى التواصل مع الإدارة للاشتراك: @x3FreTx",
+                    parse_mode=ParseMode.HTML
+                )
+            return # إنهاء الدالة بعد معالجة الرابط لعدم إرسال رسالة الترحيب
+
+    # 3. معالجة المستخدم المسجل (بدون روابط أو بروابط غير verify_)
+    if is_registered:
+        role = user.get('role', 'rider')
+        is_verified = user.get('is_verified', False)
+        name_in_db = user.get('name') or first_name
+        
+        await update.message.reply_text(
+            f"👋 مرحباً بك مجدداً يا {name_in_db}", 
+            reply_markup=get_main_kb(role, is_verified)
+        )
+        return
 
         # --- حالة طلب رحلة (order_) ---
         if arg_value.startswith("order_"):
