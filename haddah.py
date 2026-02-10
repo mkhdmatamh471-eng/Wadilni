@@ -579,7 +579,6 @@ def get_main_kb(role, is_verified=True):
     # 1. التحقق من وجود بيانات مشفرة في الرابط (context.args)
     if context.args:
         arg_value = context.args[0] # ستكون قيمتها مثلاً: chat_12345678
-         البوت الخاصة (بدون فحص) ---
         if arg_value.startswith("direct_"):
             customer_id = arg_value.replace("direct_", "")
             
