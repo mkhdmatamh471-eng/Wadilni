@@ -575,47 +575,45 @@ def get_main_kb(role, is_verified=True):
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    first_name = update.effective_user.first_name or "عزيزي"
     
-    # 1. تنظيف بيانات الجلسة المؤقتة وضمان جلب المستخدم
-    context.user_data.clear()
-    user = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id))
-
-    if not user:
-        await get_user_role(user_id)
-        user = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id))
-
-    is_registered = True if user else False
-
-    # 2. معالجة الروابط العميقة (Deep Linking) أولاً
+    # 1. التحقق من وجود بيانات مشفرة في الرابط (context.args)
     if context.args:
-        arg_value = context.args[0]
-
-        # --- حالة التحقق من الاشتراك (verify_) ---
-        if arg_value.startswith("verify_"):
-            customer_id = arg_value.replace("verify_", "")
+        arg_value = context.args[0] # ستكون قيمتها مثلاً: chat_12345678
+        
+        if arg_value.startswith("chat_"):
+            # استخراج آيدي العميل من الرابط
+            customer_id = arg_value.replace("chat_", "")
             
-            # التحقق من حالة الاشتراك من الكاش
-            is_sub = user.get('is_verified', False) if is_registered else False
+            # 2. التحقق من اشتراك السائق (من الكاش أو القاعدة)
+            user_data = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id))
+            
+            # التحقق من حالة التحقق (is_verified)
+            is_sub = user_data.get('is_verified', False) if user_data else False
             
             if is_sub:
+                # إذا كان مشترك -> نعطيه رابط العميل المباشر
                 contact_kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👤 اضغط هنا لمراسلة العميل", url=f"tg://user?id={customer_id}")]
+                    [InlineKeyboardButton("👤 اضغط هنا لبدء المحادثة مع العميل", url=f"tg://user?id={customer_id}")]
                 ])
+                
                 await update.message.reply_text(
-                    "✅ <b>تم التحقق من اشتراكك بنجاح.</b>\n\n"
-                    "يمكنك الآن التواصل مع العميل مباشرة عبر الزر أدناه:",
+                    "✅ <b>تم التحقق من اشتراكك!</b>\n"
+                    "يمكنك الآن التواصل مع العميل مباشرة عبر الزر أدناه.",
                     reply_markup=contact_kb,
                     parse_mode=ParseMode.HTML
                 )
             else:
+                # إذا كان غير مشترك -> نطلب منه الاشتراك
                 await update.message.reply_text(
-                    "⚠️ <b>عذراً، أنت غير مشترك!</b>\n\n"
-                    "رؤية روابط العملاء متاحة فقط للمشتركين الفعالين.\n"
-                    "يرجى التواصل مع الإدارة للاشتراك: @x3FreTx",
+                    "⚠️ <b>تنبيه: أنت غير مشترك!</b>\n\n"
+                    "رؤية روابط العملاء ومراسلتهم ميزة حصرية للمشتركين.\n"
+                    "لتفعيل حسابك، يرجى التواصل مع الإدارة: @x3FreTx",
                     parse_mode=ParseMode.HTML
                 )
-            return # إنهاء الدالة بعد معالجة الرابط لعدم إرسال رسالة الترحيب
+            return # إنهاء الدالة لضمان عدم إرسال رسالة الترحيب العادية
+
+    # 3. رسالة الترحيب العادية (في حال ضغط /start بدون روابط)
+    await update.message.reply_text("أهلاً بك في بوت المشاوير. يرجى الانتظار لاستلام الطلبات.")
 
     # 3. معالجة المستخدم المسجل (بدون روابط أو بروابط غير verify_)
     if is_registered:
