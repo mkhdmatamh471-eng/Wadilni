@@ -586,52 +586,29 @@ def get_main_kb(role, is_verified=True):
     user_id = update.effective_user.id
     
     # 1. التحقق من وجود بيانات مشفرة في الرابط (context.args)
-    if context.args:
-        arg_value = context.args[0] # ستكون قيمتها مثلاً: chat_12345678
-        if arg_value.startswith("direct_"):
-            customer_id = arg_value.replace("direct_", "")
+    # 1. التحقق من وجود المعرف في الرابط (سواء بدأ بـ direct_ أو chat_)
+    if args and (args[0].startswith("direct_") or args[0].startswith("chat_")):
+        try:
+            # استخراج آيدي العميل من الرابط
+            customer_id = args[0].replace("direct_", "").replace("chat_", "")
             
+            # 2. إنشاء زر المراسلة المباشر فوراً (بدون أي تحقق)
             contact_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("👤 اضغط هنا لبدء المحادثة", url=f"tg://user?id={customer_id}")]
+                [InlineKeyboardButton("👤 بدء المحادثة مع العميل الآن", url=f"tg://user?id={customer_id}")]
             ])
             
             await update.message.reply_text(
-                "✅ <b>تفضل رابط التواصل المباشر مع العميل:</b>",
+                "✅ <b>تفضل رابط التواصل المباشر:</b>\n\n"
+                "اضغط على الزر أدناه لفتح محادثة العميل فوراً.",
                 reply_markup=contact_kb,
                 parse_mode=ParseMode.HTML
             )
+            return # إنهاء الدالة لضمان عدم إرسال رسائل أخرى
+
+        except Exception as e:
+            print(f"❌ خطأ في معالجة الرابط: {e}")
             return
-        if arg_value.startswith("chat_"):
-            # استخراج آيدي العميل من الرابط
-            customer_id = arg_value.replace("chat_", "")
-            
-            # 2. التحقق من اشتراك السائق (من الكاش أو القاعدة)
-            user_data = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id))
-            
-            # التحقق من حالة التحقق (is_verified)
-            is_sub = user_data.get('is_verified', False) if user_data else False
-            
-            if is_sub:
-                # إذا كان مشترك -> نعطيه رابط العميل المباشر
-                contact_kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👤 اضغط هنا لبدء المحادثة مع العميل", url=f"tg://user?id={customer_id}")]
-                ])
-                
-                await update.message.reply_text(
-                    "✅ <b>تم التحقق من اشتراكك!</b>\n"
-                    "يمكنك الآن التواصل مع العميل مباشرة عبر الزر أدناه.",
-                    reply_markup=contact_kb,
-                    parse_mode=ParseMode.HTML
-                )
-            else:
-                # إذا كان غير مشترك -> نطلب منه الاشتراك
-                await update.message.reply_text(
-                    "⚠️ <b>تنبيه: أنت غير مشترك!</b>\n\n"
-                    "رؤية روابط العملاء ومراسلتهم ميزة حصرية للمشتركين.\n"
-                    "لتفعيل حسابك، يرجى التواصل مع الإدارة: @Servecestu",
-                    parse_mode=ParseMode.HTML
-                )
-            return # إنهاء الدالة لضمان عدم إرسال رسالة الترحيب العادية
+
 
     # 3. رسالة الترحيب العادية (في حال ضغط /start بدون روابط)
     await update.message.reply_text("أهلاً بك في بوت المشاوير. يرجى الانتظار لاستلام الطلبات.")
