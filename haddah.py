@@ -4346,7 +4346,7 @@ async def notify_channel(district, content, cust_id):
         from telegram import Bot
         bot = Bot(token=BOT_TOKEN)
 
-        bot_username = "Mishwariibot" 
+        bot_username = "Mishweribot" 
         gate_contact = f"https://t.me/{bot_username}?start=contact_{cust_id}"
 
         buttons = [
