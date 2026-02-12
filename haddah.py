@@ -587,12 +587,14 @@ def get_main_kb(role, is_verified=True):
     
     # 1. التحقق من وجود بيانات مشفرة في الرابط (context.args)
     # 1. التحقق من وجود المعرف في الرابط (سواء بدأ بـ direct_ أو chat_)
-    if args and (args[0].startswith("direct_") or args[0].startswith("chat_")):
+    
+    # يجب استخدام context.args وليس args مباشرة
+    if context.args and (context.args[0].startswith("direct_") or context.args[0].startswith("chat_")):
         try:
-            # استخراج آيدي العميل من الرابط
-            customer_id = args[0].replace("direct_", "").replace("chat_", "")
+            # استخراج آيدي العميل
+            customer_id = context.args[0].replace("direct_", "").replace("chat_", "")
             
-            # 2. إنشاء زر المراسلة المباشر فوراً (بدون أي تحقق)
+            # إنشاء زر المراسلة
             contact_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("👤 بدء المحادثة مع العميل الآن", url=f"tg://user?id={customer_id}")]
             ])
@@ -603,7 +605,7 @@ def get_main_kb(role, is_verified=True):
                 reply_markup=contact_kb,
                 parse_mode=ParseMode.HTML
             )
-            return # إنهاء الدالة لضمان عدم إرسال رسائل أخرى
+            return # إنهاء الدالة هنا
 
         except Exception as e:
             print(f"❌ خطأ في معالجة الرابط: {e}")
