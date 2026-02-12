@@ -4360,7 +4360,6 @@ async def notify_channel(district, content, cust_id):
             f"🎯 <b>طلب مشوار جديد</b>\n\n"
             f"📍 <b>المنطقة:</b> {district}\n"
             f"📝 <b>التفاصيل:</b>\n<i>{content}</i>\n\n"
-            f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}\n"
             f"⚠️ <i>الروابط أعلاه تفتح للمشتركين فقط.</i>"
         )
 
