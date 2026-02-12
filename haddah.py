@@ -17,7 +17,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardR
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from psycopg2 import pool
-from datetime import datetime
+from datetime import datetime, timezone 
         
 # مكتبات Flask والويب
 from flask import Flask
