@@ -4305,7 +4305,7 @@ async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
                 is_active = (expiry > now)
 
             # تجهيز رابط البوت الآمن ( Deep Link ) بدلاً من الرابط المباشر
-            bot_link = f"https://t.me/Mishwariibot?start=direct_{cust_id}"
+            bot_link = f"https://t.me/Mishweribot?start=direct_{cust_id}"
 
             # تجهيز محتوى الرسالة الأساسي
             msg_text = (
