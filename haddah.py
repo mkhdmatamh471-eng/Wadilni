@@ -4313,10 +4313,15 @@ async def admin_show_user_details(update, context, target_id):
                     
                     # الأزرار (أزرار شفافة)
                     if is_active:
-                        kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 مراسلة العميل", url=contact_url)]])
+                        kb = InlineKeyboardMarkup([[
+                            InlineKeyboardButton("💬 مراسلة العميل (آمن)", url=bot_link)
+                        ]])
                         footer = "\n✅ اشتراكك فعال"
                     else:
-                        kb = InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/Servecestu")]])
+                        # لغير المشتركين يبقى رابط الاشتراك
+                        kb = InlineKeyboardMarkup([[
+                            InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")
+                        ]])
                         footer = "\n⚠️ التواصل للمشتركين فقط"
 
                     # الإرسال (تحويل user_id إلى int لضمان القبول)
