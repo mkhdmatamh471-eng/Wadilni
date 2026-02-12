@@ -600,15 +600,23 @@ def get_main_kb(role, is_verified=True):
         
         # --- (أ) حالة المراسلة المباشرة ---
         if arg_value.startswith(("direct_", "chat_")):
-            customer_id = arg_value.replace("direct_", "").replace("chat_", "")
-            contact_kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("👤 بدء المحادثة مع العميل الآن", url=f"tg://user?id={customer_id}")
-            ]])
+            # 1. استخراج الآيدي
+            customer_id = ''.join(filter(str.isdigit, arg_value.replace("direct_", "").replace("chat_", "")))
+            
+            # 2. إنشاء زر "تأكيد" يرسل أمراً للبوت (Callback Query) أو يفتح رابطاً
+            # لتجنب الخطأ، سنرسل رسالة أولى فيها زر "تفعيل الرابط"
+            confirm_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ إظهار زر مراسلة العميل", callback_data=f"show_contact_{customer_id}")]
+            ])
+            
             await update.message.reply_text(
-                "✅ <b>تفضل رابط التواصل المباشر:</b>\nاضغط على الزر أدناه لفتح المحادثة.",
-                reply_markup=contact_kb, parse_mode=ParseMode.HTML
+                "🏁 <b>نظام التحقق من الطلبات</b>\n\n"
+                "تم العثور على بيانات العميل بنجاح. اضغط على الزر أدناه لتوليد رابط المراسلة المباشر.",
+                reply_markup=confirm_kb,
+                parse_mode=ParseMode.HTML
             )
             return
+
 
         # --- (ب) حالة طلب رحلة (order_) ---
         elif arg_value.startswith("order_"):
@@ -2152,6 +2160,34 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
         return
+
+    if data.startswith("show_contact_"):
+        customer_id = data.replace("show_contact_", "")
+        
+        # الرابط النهائي
+        target_url = f"tg://user?id={customer_id}"
+        
+        contact_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("👤 مراسلة العميل الآن", url=target_url)]
+        ])
+        
+        # تعديل الرسالة نفسها لتظهر زر التواصل
+        try:
+            await query.edit_message_text(
+                f"✅ <b>الرابط جاهز الآن!</b>\n\n"
+                f"يمكنك التواصل مع العميل عبر الزر أدناه:",
+                reply_markup=contact_kb,
+                parse_mode=ParseMode.HTML
+            )
+        except Exception:
+            # إذا رفض تليجرام الزر، نرسله كرابط نصي هايبرلينك (خطة بديلة)
+            mention_link = f'<a href="{target_url}">إضغط هنا لبدء المحادثة</a>'
+            await query.edit_message_text(
+                f"✅ <b>رابط التواصل المباشر:</b>\n\n🔗 {mention_link}",
+                parse_mode=ParseMode.HTML
+            )
+            return
+            
 
     # معالجة الضغط على اسم المدينة
     if data.startswith("city_"):
