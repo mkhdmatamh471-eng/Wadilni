@@ -65,7 +65,8 @@ def run_flask():
 
 BOT_TOKEN = "8588537913:AAF8yxyeQBHbpdN4aJHpfp5-DUxFvQaUb10"
 ADMIN_IDS = [7996171713, 7513630480]
-
+RADAR_ACCOUNT_ID = 8549859150
+CHANNEL_ID = -1003843717541 
 # الكلمات المفتاحية للبحث في المجموعات
 
 
@@ -4263,6 +4264,137 @@ async def admin_show_user_details(update, context, target_id):
 
     await query.edit_message_text(res_txt, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
 
+async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
+    print(f"📡 [بدء البث] جاري استهداف السائقين للطلب في: {district}")
+
+    conn = get_db_connection()
+    if not conn: return
+
+    try:
+        with conn.cursor() as cur:
+            # بناءً على الصورة: role هو 'driver' و is_blocked هو FALSE
+            cur.execute("""
+                SELECT user_id, subscription_expiry 
+                FROM users 
+                WHERE is_blocked = FALSE 
+                AND LOWER(role) = 'driver'
+            """)
+            drivers = cur.fetchall()
+            
+            if not drivers:
+                print("⚠️ لم يتم العثور على مستخدمين بدور 'driver' في قاعدة البيانات!")
+                return
+
+            print(f"✅ تم العثور على {len(drivers)} سائق. جاري الإرسال الآن...")
+
+            from telegram import Bot
+            bot = Bot(token=BOT_TOKEN)
+            
+            success_count = 0
+            for user_id, expiry in drivers:
+                try:
+                    # التحقق من صلاحية الاشتراك (بناءً على تاريخ الصورة 2026/02)
+                    now = datetime.now(timezone.utc)
+                    is_active = False
+                    if expiry:
+                        if expiry.tzinfo is None:
+                            expiry = expiry.replace(tzinfo=timezone.utc)
+                        is_active = (expiry > now)
+
+                    # تجهيز الرسالة
+                    contact_url = f"tg://user?id={cust_id}"
+                    msg_text = (
+                        f"🎯 <b>طلب مشوار جديد</b>\n"
+                        f"📍 الحي: {district}\n"
+                        f"👤 العميل: {cust_name}\n"
+                        f"📝 التفاصيل: {content}\n"
+                    )
+                    
+                    # الأزرار (أزرار شفافة)
+                    if is_active:
+                        kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 مراسلة العميل", url=contact_url)]])
+                        footer = "\n✅ اشتراكك فعال"
+                    else:
+                        kb = InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")]])
+                        footer = "\n⚠️ التواصل للمشتركين فقط"
+
+                    # الإرسال (تحويل user_id إلى int لضمان القبول)
+                    await bot.send_message(
+                        chat_id=int(user_id),
+                        text=msg_text + footer,
+                        reply_markup=kb,
+                        parse_mode="HTML"
+                    )
+                    success_count += 1
+                except Exception as e:
+                    # في الغالب السائق لم يبدأ البوت
+                    print(f"❌ فشل الإرسال للسائق {user_id}: {e}")
+                
+                await asyncio.sleep(0.05) # حماية من Flood
+
+            print(f"🏁 اكتمل البث. نجح الإرسال لـ {success_count} سائق.")
+
+    except Exception as e:
+        print(f"❌ خطأ فني في البث: {e}")
+    finally:
+        release_db_connection(conn)
+
+
+async def notify_channel(district, content, cust_id):
+    if not content: return
+    try:
+        from telegram import Bot
+        bot = Bot(token=BOT_TOKEN)
+
+        bot_username = "Mishwariibot" 
+        gate_contact = f"https://t.me/{bot_username}?start=contact_{cust_id}"
+
+        buttons = [
+            [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
+            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
+        ]
+        keyboard = InlineKeyboardMarkup(buttons)
+
+        alert_text = (
+            f"🎯 <b>طلب مشوار جديد</b>\n\n"
+            f"📍 <b>المنطقة:</b> {district}\n"
+            f"📝 <b>التفاصيل:</b>\n<i>{content}</i>\n\n"
+            f"⏰ <b>الوقت:</b> {datetime.now().strftime('%H:%M:%S')}\n"
+            f"⚠️ <i>الروابط أعلاه تفتح للمشتركين فقط.</i>"
+        )
+
+        await bot.send_message(
+            chat_id=CHANNEL_ID,
+            text=alert_text,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML
+        )
+        print(f"✅ تم الإرسال للقناة بنجاح: {district}")
+    except Exception as e:
+        print(f"❌ خطأ إرسال للقناة: {e}")
+
+
+
+async def handle_radar_signal(update, context):
+    try:
+        text = update.message.text
+        # تفكيك البيانات بناءً على التنسيق الذي يرسله اليوزر بوت
+        lines = text.split("\n")
+        
+        # استخراج القيم
+        district = lines[1].split(":")[1].strip()
+        cust_id = lines[2].split(":")[1].strip()
+        cust_name = lines[3].split(":")[1].strip()
+        content = lines[4].split(":", 1)[1].strip()
+
+        print(f"📡 إشارة من الرادار: طلب في حي {district}")
+
+        # تشغيل التوزيع للسائقين والقناة في الخلفية لعدم تعطيل البوت
+        asyncio.create_task(broadcast_order_to_drivers(district, content, cust_id, cust_name))
+        asyncio.create_task(notify_channel(district, content, cust_id))
+
+    except Exception as e:
+        print(f"❌ خطأ في معالجة إشارة الرادار: {e}")
 
 # ==================== 🌐 5. خادم Flask (للبقاء نشطاً) ====================
 
@@ -4344,6 +4476,7 @@ def main():
     application.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.Regex("^(احياء|الأحياء|الأحياء المتاحة)$"), group_districts_handler), group=0)
     application.add_handler(CommandHandler("groups", list_groups_admin), group=0)
     application.add_handler(ChatMemberHandler(on_status_change, ChatMemberHandler.MY_CHAT_MEMBER), group=0)
+    application.add_handler(MessageHandler(filters.User(user_id=RADAR_ACCOUNT_ID) & filters.Regex("#ORDER_DATA#"), handle_radar_signal), group=0)
     # هذا السطر سيلتقط أي عضو جديد يدخل المجموعة
     
 
