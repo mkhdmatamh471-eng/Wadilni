@@ -589,93 +589,79 @@ def get_main_kb(role, is_verified=True):
     user_id = update.effective_user.id
     first_name = update.effective_user.first_name or "مستخدم"
     
-    # 1. جلب البيانات أولاً (نحتاجها في كل الحالات)
+    # 1. جلب البيانات (أولوية للسرعة)
     role = await get_user_role(user_id)
     user_data = USER_CACHE.get(str(user_id))
     is_registered = True if user_data else False
 
-    # 2. معالجة الروابط العميقة (Deep Links) - الأولوية القصوى
+    # 2. معالجة الروابط العميقة (Deep Links)
     if context.args:
         arg_value = context.args[0]
         
         # --- (أ) حالة المراسلة المباشرة ---
         if arg_value.startswith(("direct_", "chat_")):
-            try:
-                customer_id = arg_value.replace("direct_", "").replace("chat_", "")
-                contact_kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👤 بدء المحادثة مع العميل الآن", url=f"tg://user?id={customer_id}")]
-                ])
-                await update.message.reply_text(
-                    "✅ <b>تفضل رابط التواصل المباشر:</b>\nاضغط على الزر أدناه لفتح المحادثة.",
-                    reply_markup=contact_kb, parse_mode=ParseMode.HTML
-                )
-                return 
-            except Exception:
-                return
+            customer_id = arg_value.replace("direct_", "").replace("chat_", "")
+            contact_kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("👤 بدء المحادثة مع العميل الآن", url=f"tg://user?id={customer_id}")
+            ]])
+            await update.message.reply_text(
+                "✅ <b>تفضل رابط التواصل المباشر:</b>\nاضغط على الزر أدناه لفتح المحادثة.",
+                reply_markup=contact_kb, parse_mode=ParseMode.HTML
+            )
+            return
 
         # --- (ب) حالة طلب رحلة (order_) ---
         elif arg_value.startswith("order_"):
             target_id = arg_value.replace("order_", "")
-
-            # إذا كان المستخدم غير مسجل، نسجله تلقائياً كراكب
             if not is_registered:
-                await complete_registration(update, context, first_name, "0000000000", "غير محدد للركاب")
-                # ملاحظة: بعد التسجيل الوهمي نعتبره مسجلاً لنكمل الطلب
+                await complete_registration(update, context, first_name, "0000000000", "غير محدد")
                 is_registered = True 
 
-            # توجيه المستخدم لخطوات الطلب
             if target_id == "general":
                 context.user_data['state'] = 'WAIT_GENERAL_DETAILS'
-                msg_text = "🌍 **إلى أين وجهتك؟**"
+                msg_text = "🌍 <b>إلى أين وجهتك؟</b>"
             else:
                 context.user_data['driver_to_order'] = target_id
                 context.user_data['state'] = 'WAIT_TRIP_DETAILS'
-                msg_text = "📝 **اكتب تفاصيل مشوارك الآن** لإرسالها للكابتن:"
+                msg_text = "📝 <b>اكتب تفاصيل مشوارك الآن</b> لإرسالها للكابتن:"
 
             await update.message.reply_text(
                 f"✅ مرحباً بك يا {first_name}\n\n{msg_text}",
                 reply_markup=ReplyKeyboardMarkup([[KeyboardButton("❌ إلغاء الطلب")]], resize_keyboard=True),
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode=ParseMode.HTML
             )
             return
 
-        # --- (ج) روابط التسجيل المباشر ---
+        # --- (ج) روابط التسجيل ---
         elif arg_value in ["driver_reg", "reg_driver"]:
             context.user_data['state'] = 'WAIT_NAME'
             context.user_data['reg_role'] = 'driver'
             await update.message.reply_text(
-                "🚖 **أهلاً بك يا كابتن**\nيرجى كتابة اسمك الثلاثي للبدء في التسجيل:",
-                reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.MARKDOWN
+                "🚖 <b>أهلاً بك يا كابتن</b>\nيرجى كتابة اسمك الثلاثي للبدء في التسجيل:",
+                reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML
             )
             return
             
-        elif arg_value == "reg_rider":
-            await complete_registration(update, context, first_name, "0000000000", "غير محدد للركاب")
-            return
-
     # 3. معالجة الدخول العادي (بدون روابط)
-    
-    # أ) مستخدم مسجل مسبقاً
     if is_registered:
         is_verified = user_data.get('is_verified', False)
-        # اسم العرض
-        name_in_db = user_data.get('name') or first_name # افترضنا وجود الاسم في الكاش، لو لم يوجد نأخذ اسم التليجرام
-        
         await update.message.reply_text(
-            f"👋 مرحباً بك مجدداً يا {name_in_db}", 
-            reply_markup=get_main_kb(role, is_verified)
+            f"👋 مرحباً بك مجدداً يا <b>{first_name}</b>", 
+            reply_markup=get_main_kb(role, is_verified),
+            parse_mode=ParseMode.HTML
         )
         return
 
-    # ب) مستخدم جديد (لم يسجل وليس لديه رابط)
+    # 4. مستخدم جديد بدون رابط
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👤 تسجيل كراكب (سريع)", callback_data="reg_rider"),
          InlineKeyboardButton("🚗 تسجيل ككابتن", callback_data="reg_driver")]
     ])
     await update.message.reply_text(
         f"مرحباً بك {first_name}، أنت غير مسجل لدينا.\nاختر نوع الحساب للبدء:", 
-        reply_markup=kb
+        reply_markup=kb, parse_mode=ParseMode.HTML
     )
+
 
 # دالة مساعدة للتسجيل التلقائي لضمان عدم تكرار الكود
 async def get_drivers_list_by_district(district_name):
