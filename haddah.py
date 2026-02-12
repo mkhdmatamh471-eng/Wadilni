@@ -4316,7 +4316,7 @@ async def admin_show_user_details(update, context, target_id):
                         kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 مراسلة العميل", url=contact_url)]])
                         footer = "\n✅ اشتراكك فعال"
                     else:
-                        kb = InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")]])
+                        kb = InlineKeyboardMarkup([[InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/Servecestu")]])
                         footer = "\n⚠️ التواصل للمشتركين فقط"
 
                     # الإرسال (تحويل user_id إلى int لضمان القبول)
@@ -4352,7 +4352,7 @@ async def notify_channel(district, content, cust_id):
 
         buttons = [
             [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
-            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
+            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/Servecestu")]
         ]
         keyboard = InlineKeyboardMarkup(buttons)
 
