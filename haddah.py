@@ -18,7 +18,10 @@ from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from psycopg2 import pool
 from datetime import datetime, timezone 
-        
+from telegram import Bot, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.request import HTTPXRequest
+
+# 1. إعداد البوت بـ Connection Pool عالي للأداء السريع
 # مكتبات Flask والويب
 from flask import Flask
 
@@ -43,6 +46,8 @@ from telegram.ext import MessageHandler, filters, ContextTypes, ChatMemberHandle
 from psycopg2 import pool
 KSA_TZ = pytz.timezone('Asia/Riyadh')
 user_cooldowns = {}
+
+
 # إعداد السيرفر لـ Render
 app = Flask('')
 
@@ -69,6 +74,8 @@ ADMIN_IDS = [7996171713, 7513630480, 8549859150]
 RADAR_ACCOUNT_ID = 8549859150
 CHANNEL_ID = -1003843717541 
 # الكلمات المفتاحية للبحث في المجموعات
+msg_request = HTTPXRequest(connection_pool_size=50, connect_timeout=10)
+distribution_bot = Bot(token=BOT_TOKEN, request=msg_request)
 
 
 # --- 1. إعدادات الأحياء الذكية (جدة و مكة) ---
@@ -4265,87 +4272,92 @@ async def admin_show_user_details(update, context, target_id):
 
     await query.edit_message_text(res_txt, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
 
-async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
-    print(f"📡 [بدء البث] جاري استهداف السائقين للطلب في: {district}")
 
+# 1. إعداد البوت بـ Connection Pool عالي للأداء السريع
+
+async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
+    print(f"📡 [بدء البث] استهداف السائقين...")
+    
     conn = get_db_connection()
     if not conn: return
-
+    
     try:
         with conn.cursor() as cur:
-            # بناءً على الصورة: role هو 'driver' و is_blocked هو FALSE
             cur.execute("""
                 SELECT user_id, subscription_expiry 
                 FROM users 
-                WHERE is_blocked = FALSE 
-                AND LOWER(role) = 'driver'
+                WHERE is_blocked = FALSE AND LOWER(role) = 'driver'
             """)
             drivers = cur.fetchall()
             
-            if not drivers:
-                print("⚠️ لم يتم العثور على مستخدمين بدور 'driver' في قاعدة البيانات!")
-                return
+        if not drivers: return
 
-            print(f"✅ تم العثور على {len(drivers)} سائق. جاري الإرسال الآن...")
+        now = datetime.now(timezone.utc)
+        active_tasks = []
+        inactive_tasks = []
 
-            from telegram import Bot
-            bot = Bot(token=BOT_TOKEN)
-            
-            success_count = 0
-            for user_id, expiry in drivers:
-                try:
-                    # التحقق من صلاحية الاشتراك (بناءً على تاريخ الصورة 2026/02)
-                    now = datetime.now(timezone.utc)
-                    is_active = False
-                    if expiry:
-                        if expiry.tzinfo is None:
-                            expiry = expiry.replace(tzinfo=timezone.utc)
-                        is_active = (expiry > now)
+        for user_id, expiry in drivers:
+            # التحقق من صلاحية الاشتراك
+            is_active = False
+            if expiry:
+                if expiry.tzinfo is None: 
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+                is_active = (expiry > now)
 
-                    # تجهيز الرسالة
-                    contact_url = f"tg://user?id={cust_id}"
-                    msg_text = (
-                        f"🎯 <b>طلب مشوار جديد</b>\n"
-                        f"📍 الحي: {district}\n"
-                        f"👤 العميل: {cust_name}\n"
-                        f"📝 التفاصيل: {content}\n"
-                    )
-                    
-                    # الأزرار (أزرار شفافة)
-                    if is_active:
-                        kb = InlineKeyboardMarkup([[
-                            InlineKeyboardButton("💬 مراسلة العميل (آمن)", url=bot_link)
-                        ]])
-                        footer = "\n✅ اشتراكك فعال"
-                    else:
-                        # لغير المشتركين يبقى رابط الاشتراك
-                        kb = InlineKeyboardMarkup([[
-                            InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")
-                        ]])
-                        footer = "\n⚠️ التواصل للمشتركين فقط"
+            # تجهيز رابط البوت الآمن ( Deep Link ) بدلاً من الرابط المباشر
+            bot_link = f"https://t.me/Mishwariibot?start=direct_{cust_id}"
 
-                    # الإرسال (تحويل user_id إلى int لضمان القبول)
-                    await bot.send_message(
-                        chat_id=int(user_id),
-                        text=msg_text + footer,
-                        reply_markup=kb,
-                        parse_mode="HTML"
-                    )
-                    success_count += 1
-                except Exception as e:
-                    # في الغالب السائق لم يبدأ البوت
-                    print(f"❌ فشل الإرسال للسائق {user_id}: {e}")
-                
-                await asyncio.sleep(0.05) # حماية من Flood
+            # تجهيز محتوى الرسالة الأساسي
+            msg_text = (
+                f"🎯 <b>طلب مشوار جديد</b>\n"
+                f"📍 الحي: {district}\n"
+                f"👤 العميل: {cust_name}\n"
+                f"📝 التفاصيل: {content}\n"
+            )
 
-            print(f"🏁 اكتمل البث. نجح الإرسال لـ {success_count} سائق.")
+            # --- ضبط الإزاحة المطلوبة للأزرار ---
+            if is_active:
+                kb = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("💬 مراسلة العميل (آمن)", url=bot_link)
+                ]])
+                footer = "\n✅ اشتراكك فعال"
+                active_tasks.append(send_with_retry(int(user_id), msg_text + footer, kb))
+            else:
+                kb = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")
+                ]])
+                footer = "\n⚠️ التواصل للمشتركين فقط"
+                inactive_tasks.append(send_with_retry(int(user_id), msg_text + footer, kb))
+
+        # 2. إرسال دفعات المشتركين (أولوية قصوى)
+        print(f"🚀 إرسال لـ {len(active_tasks)} مشترك بروابط آمنة...")
+        for i in range(0, len(active_tasks), 25):
+            batch = active_tasks[i:i+25]
+            await asyncio.gather(*batch)
+            await asyncio.sleep(0.5)
+
+        # 3. إرسال دفعات غير المشتركين
+        print(f"🚛 إرسال لـ {len(inactive_tasks)} غير مشترك...")
+        for i in range(0, len(inactive_tasks), 25):
+            batch = inactive_tasks[i:i+25]
+            await asyncio.gather(*batch)
+            await asyncio.sleep(0.5)
 
     except Exception as e:
         print(f"❌ خطأ فني في البث: {e}")
     finally:
         release_db_connection(conn)
 
-
+async def send_with_retry(user_id, text, reply_markup):
+    try:
+        await distribution_bot.send_message(
+            chat_id=user_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
 async def notify_channel(district, content, cust_id):
     if not content: return
     try:
