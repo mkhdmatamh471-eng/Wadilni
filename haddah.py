@@ -4289,7 +4289,7 @@ async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
                 active_tasks.append(send_with_retry(int(user_id), msg_text + footer, kb))
             else:
                 kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/x3FreTx")
+                    InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/Mishweribot")
                 ]])
                 footer = "\n⚠️ التواصل للمشتركين فقط"
                 inactive_tasks.append(send_with_retry(int(user_id), msg_text + footer, kb))
