@@ -4297,8 +4297,8 @@ async def admin_show_user_details(update, context, target_id):
 
 # 1. إعداد البوت بـ Connection Pool عالي للأداء السريع
 
-async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
-    print(f"📡 [بدء البث] إرسال روابط نصية للسائقين...")
+async def broadcast_order_to_drivers(district, content, cust_name, username, msg_link):
+    print(f"📡 [بدء البث] توزيع الطلب ذكياً...")
     
     conn = get_db_connection()
     if not conn: return
@@ -4313,57 +4313,56 @@ async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
             drivers = cur.fetchall()
             
         if not drivers: return
-
         now = datetime.now(timezone.utc)
         active_tasks = []
         inactive_tasks = []
 
+        # تحديد الرابط الأفضل للمشتركين
+        # إذا كان اليوزر نيم موجوداً نستخدمه، وإلا نستخدم رابط الرسالة
+        if username and username != "None":
+            final_link = username
+            link_text = "اضغط هنا لمراسلة العميل (عبر اليوزر)"
+        else:
+            final_link = msg_link
+            link_text = "انتقل للرسالة الأصلية لمراسلة العميل"
+
         for user_id, expiry in drivers:
-            # 1. التحقق من صلاحية الاشتراك
             is_active = False
             if expiry:
-                if expiry.tzinfo is None: 
-                    expiry = expiry.replace(tzinfo=timezone.utc)
+                if expiry.tzinfo is None: expiry = expiry.replace(tzinfo=timezone.utc)
                 is_active = (expiry > now)
 
-            # 2. تجهيز محتوى الرسالة (بدون أزرار نهائياً)
             if is_active:
-                # للمشتركين: نضع رابط المراسلة المباشر كـ Hyperlink
-                direct_link = f"tg://user?id={cust_id}"
+                # رسالة المشتركين: الرابط الذكي
                 msg_text = (
                     f"🎯 <b>طلب مشوار جديد</b>\n\n"
                     f"📍 الحي: {district}\n"
                     f"👤 العميل: {cust_name}\n"
                     f"📝 التفاصيل: {content}\n\n"
-                    f"🔗 <a href='{direct_link}'>اضغط هنا لمراسلة العميل مباشرة</a>\n"
+                    f"🔗 <a href='{final_link}'>{link_text}</a>\n"
                     f"------------------------\n"
                     f"✅ اشتراكك فعال"
                 )
                 active_tasks.append(send_with_retry(int(user_id), msg_text, None))
             else:
-                # لغير المشتركين: نضع رابط الاشتراك كـ Hyperlink
+                # رسالة غير المشتركين: رابط حسابك للاشتراك
                 sub_link = "https://t.me/Servecestu"
                 msg_text = (
-                    f"🎯 <b>طلب مشوار جديد</b>\n\n"
-                    f"📍 الحي: {district}\n"
-                    f"👤 العميل: {cust_name}\n"
-                    f"📝 التفاصيل: {content}\n\n"
-                    f"⚠️ التواصل للمشتركين فقط\n"
+                    f"🎯 <b>طلب مشوار جديد في {district}</b>\n\n"
+                    f"📝 التفاصيل: {content[:40]}...\n\n"
+                    f"⚠️ التواصل متاح للمشتركين فقط\n"
                     f"💳 <a href='{sub_link}'>اضغط هنا للاشتراك وتفعيل المراسلة</a>"
                 )
                 inactive_tasks.append(send_with_retry(int(user_id), msg_text, None))
 
-        # 3. إرسال الدفعات (المشتركين أولاً)
+        # تنفيذ المهام كما هي في كودك...
         if active_tasks:
             for i in range(0, len(active_tasks), 25):
-                batch = active_tasks[i:i+25]
-                await asyncio.gather(*batch)
+                await asyncio.gather(*active_tasks[i:i+25])
                 await asyncio.sleep(0.5)
-
         if inactive_tasks:
             for i in range(0, len(inactive_tasks), 25):
-                batch = inactive_tasks[i:i+25]
-                await asyncio.gather(*batch)
+                await asyncio.gather(*inactive_tasks[i:i+25])
                 await asyncio.sleep(0.5)
 
     except Exception as e:
@@ -4424,7 +4423,6 @@ async def handle_radar_signal(update, context):
         if not text or "#ORDER_DATA#" not in text:
             return
 
-        # تحويل النص إلى قاموس لاستخراج القيم بسهولة
         lines = text.split("\n")
         data = {}
         for line in lines:
@@ -4432,21 +4430,17 @@ async def handle_radar_signal(update, context):
                 key, value = line.split(":", 1)
                 data[key.strip()] = value.strip()
         
-        # استخراج القيم باستخدام المفاتيح التي أرسلها اليوزربوت
-        district = data.get("DISTRICT", "عام")
-        cust_id  = data.get("CUST_ID", "0")
+        # استخراج القيم الجديدة
+        district  = data.get("DISTRICT", "عام")
         cust_name = data.get("CUST_NAME", "عميل")
-        content  = data.get("CONTENT", "لا توجد تفاصيل")
-        # cust_link = data.get("CUST_LINK") # الرابط متاح هنا إذا احتجت استخدامه مباشرة
+        content   = data.get("CONTENT", "لا توجد تفاصيل")
+        username  = data.get("USERNAME", "None") # يوزر العميل
+        msg_link  = data.get("MSG_LINK", "")     # رابط الرسالة الأصلية
 
-        print(f"📡 إشارة من الرادار: طلب في حي {district} للعميل {cust_name}")
+        print(f"📡 إشارة رادار: حي {district} | العميل {cust_name}")
 
-        # تشغيل التوزيع للسائقين والقناة في الخلفية لعدم تعطيل البوت
-        # نرسل cust_id فقط لأننا نعتمد نظام الـ Deep Link (t.me/bot?start=direct_ID)
-        asyncio.create_task(broadcast_order_to_drivers(district, content, cust_id, cust_name))
-        
-        # إذا كنت تريد إرسال الرابط المباشر للقناة (اختياري)
-        asyncio.create_task(notify_channel(district, content, cust_id))
+        # نرسل الروابط لدالة البث
+        asyncio.create_task(broadcast_order_to_drivers(district, content, cust_name, username, msg_link))
 
     except Exception as e:
         print(f"❌ خطأ في معالجة إشارة الرادار: {e}")
