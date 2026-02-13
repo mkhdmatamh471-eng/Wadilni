@@ -4419,19 +4419,31 @@ async def notify_channel(district, content, cust_id):
 async def handle_radar_signal(update, context):
     try:
         text = update.message.text
-        # تفكيك البيانات بناءً على التنسيق الذي يرسله اليوزر بوت
-        lines = text.split("\n")
-        
-        # استخراج القيم
-        district = lines[1].split(":")[1].strip()
-        cust_id = lines[2].split(":")[1].strip()
-        cust_name = lines[3].split(":")[1].strip()
-        content = lines[4].split(":", 1)[1].strip()
+        if not text or "#ORDER_DATA#" not in text:
+            return
 
-        print(f"📡 إشارة من الرادار: طلب في حي {district}")
+        # تحويل النص إلى قاموس لاستخراج القيم بسهولة
+        lines = text.split("\n")
+        data = {}
+        for line in lines:
+            if ":" in line:
+                key, value = line.split(":", 1)
+                data[key.strip()] = value.strip()
+        
+        # استخراج القيم باستخدام المفاتيح التي أرسلها اليوزربوت
+        district = data.get("DISTRICT", "عام")
+        cust_id  = data.get("CUST_ID", "0")
+        cust_name = data.get("CUST_NAME", "عميل")
+        content  = data.get("CONTENT", "لا توجد تفاصيل")
+        # cust_link = data.get("CUST_LINK") # الرابط متاح هنا إذا احتجت استخدامه مباشرة
+
+        print(f"📡 إشارة من الرادار: طلب في حي {district} للعميل {cust_name}")
 
         # تشغيل التوزيع للسائقين والقناة في الخلفية لعدم تعطيل البوت
+        # نرسل cust_id فقط لأننا نعتمد نظام الـ Deep Link (t.me/bot?start=direct_ID)
         asyncio.create_task(broadcast_order_to_drivers(district, content, cust_id, cust_name))
+        
+        # إذا كنت تريد إرسال الرابط المباشر للقناة (اختياري)
         asyncio.create_task(notify_channel(district, content, cust_id))
 
     except Exception as e:
