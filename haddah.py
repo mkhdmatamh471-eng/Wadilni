@@ -605,24 +605,45 @@ def get_main_kb(role, is_verified=True):
         
         # --- (أ) حالة المراسلة المباشرة ---
         if arg_value.startswith(("direct_", "chat_")):
-            # 1. استخراج آيدي العميل من الرابط العميق
+            # 1. استخراج آيدي العميل
             customer_id = ''.join(filter(str.isdigit, arg_value.replace("direct_", "").replace("chat_", "")))
             
-            # 2. إنشاء الأزرار (رابط المراسلة المباشر + رابط الاشتراك)
-            # ملاحظة: وضعنا رابط المراسلة كزر "URL" مباشرة لأنه يعمل الآن 
-            # كون المستخدم (السائق) في حالة تفاعل نشط مع البوت.
+            # 2. تجهيز الروابط
+            direct_url = f"tg://user?id={customer_id}"
+            sub_url = "https://t.me/Servecestu"
+            
+            # 3. محاولة إرسال الزر المباشر
             contact_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("👤 مراسلة العميل الآن", url=f"tg://user?id={customer_id}")],
-                [InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/Servecestu")]
+                [InlineKeyboardButton("👤 مراسلة العميل الآن", url=direct_url)],
+                [InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url=sub_url)]
             ])
             
-            # 3. إرسال الرسالة النهائية للسائق
-            await update.message.reply_text(
-                "✅ <b>تم جلب بيانات التواصل بنجاح!</b>\n\n"
-                "اضغط على الزر أدناه لبدء المحادثة الفورية مع العميل:",
-                reply_markup=contact_kb,
-                parse_mode=ParseMode.HTML
-            )
+            try:
+                await update.message.reply_text(
+                    "✅ <b>تم جلب بيانات العميل!</b>\n\nاضغط على الزر أدناه لبدء المحادثة:",
+                    reply_markup=contact_kb,
+                    parse_mode=ParseMode.HTML
+                )
+            except telegram.error.BadRequest as e:
+                if "Button_user_invalid" in str(e):
+                    # 4. الحل البديل في حال فشل الزر (إرسال رابط نصي هايبرلينك)
+                    # هذا الجزء لن يسبب خطأ أبداً وسيعمل مع السائق
+                    alt_link = f'<a href="{direct_url}">اضغط هنا لمراسلة العميل</a>'
+                    alt_kb = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url=sub_url)]
+                    ])
+                    
+                    await update.message.reply_text(
+                        f"✅ <b>تم جلب بيانات العميل!</b>\n\n"
+                        f"بسبب قيود خصوصية تليجرام، استخدم الرابط النصي:\n"
+                        f"🔗 {alt_link}\n\n"
+                        f"<i>(ملاحظة: الرابط أعلاه يعمل بنفس كفاءة الزر)</i>",
+                        reply_markup=alt_kb,
+                        parse_mode=ParseMode.HTML
+                    )
+                else:
+                    # إعادة رفع الخطأ إذا كان شيئاً آخر غير Button_user_invalid
+                    raise e
             return
 
 
