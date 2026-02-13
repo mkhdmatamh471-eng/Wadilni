@@ -4298,7 +4298,7 @@ async def admin_show_user_details(update, context, target_id):
 # 1. إعداد البوت بـ Connection Pool عالي للأداء السريع
 
 async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
-    print(f"📡 [بدء البث] استهداف السائقين...")
+    print(f"📡 [بدء البث] إرسال روابط نصية للسائقين...")
     
     conn = get_db_connection()
     if not conn: return
@@ -4318,9 +4318,6 @@ async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
         active_tasks = []
         inactive_tasks = []
 
-        # يوزر البوت الرسمي (تأكد من كتابته بشكل صحيح بدون @)
-        bot_username = "Mishweribot" 
-
         for user_id, expiry in drivers:
             # 1. التحقق من صلاحية الاشتراك
             is_active = False
@@ -4329,43 +4326,45 @@ async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
                     expiry = expiry.replace(tzinfo=timezone.utc)
                 is_active = (expiry > now)
 
-            # 2. تجهيز محتوى الرسالة
-            msg_text = (
-                f"🎯 <b>طلب مشوار جديد</b>\n"
-                f"📍 الحي: {district}\n"
-                f"👤 العميل: {cust_name}\n"
-                f"📝 التفاصيل: {content}\n"
-            )
-
+            # 2. تجهيز محتوى الرسالة (بدون أزرار نهائياً)
             if is_active:
-                # رابط عميق يوجه السائق للبوت مع آيدي العميل
-                deep_link = f"https://t.me/{bot_username}?start=direct_{cust_id}"
-                
-                kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("💬 الحصول على رابط المراسلة", url=deep_link)
-                ]])
-                footer = "\n✅ اشتراكك فعال"
-                active_tasks.append(send_with_retry(int(user_id), msg_text + footer, kb))
+                # للمشتركين: نضع رابط المراسلة المباشر كـ Hyperlink
+                direct_link = f"tg://user?id={cust_id}"
+                msg_text = (
+                    f"🎯 <b>طلب مشوار جديد</b>\n\n"
+                    f"📍 الحي: {district}\n"
+                    f"👤 العميل: {cust_name}\n"
+                    f"📝 التفاصيل: {content}\n\n"
+                    f"🔗 <a href='{direct_link}'>اضغط هنا لمراسلة العميل مباشرة</a>\n"
+                    f"------------------------\n"
+                    f"✅ اشتراكك فعال"
+                )
+                active_tasks.append(send_with_retry(int(user_id), msg_text, None))
             else:
-                kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/Servecestu")
-                ]])
-                footer = "\n⚠️ التواصل متاح للمشتركين فقط"
-                inactive_tasks.append(send_with_retry(int(user_id), msg_text + footer, kb))
+                # لغير المشتركين: نضع رابط الاشتراك كـ Hyperlink
+                sub_link = "https://t.me/Servecestu"
+                msg_text = (
+                    f"🎯 <b>طلب مشوار جديد</b>\n\n"
+                    f"📍 الحي: {district}\n"
+                    f"👤 العميل: {cust_name}\n"
+                    f"📝 التفاصيل: {content}\n\n"
+                    f"⚠️ التواصل للمشتركين فقط\n"
+                    f"💳 <a href='{sub_link}'>اضغط هنا للاشتراك وتفعيل المراسلة</a>"
+                )
+                inactive_tasks.append(send_with_retry(int(user_id), msg_text, None))
 
-        # 2. إرسال دفعات المشتركين (أولوية قصوى)
-        print(f"🚀 إرسال لـ {len(active_tasks)} مشترك...")
-        for i in range(0, len(active_tasks), 25):
-            batch = active_tasks[i:i+25]
-            await asyncio.gather(*batch)
-            await asyncio.sleep(0.5)
+        # 3. إرسال الدفعات (المشتركين أولاً)
+        if active_tasks:
+            for i in range(0, len(active_tasks), 25):
+                batch = active_tasks[i:i+25]
+                await asyncio.gather(*batch)
+                await asyncio.sleep(0.5)
 
-        # 3. إرسال دفعات غير المشتركين
-        print(f"🚛 إرسال لـ {len(inactive_tasks)} غير مشترك...")
-        for i in range(0, len(inactive_tasks), 25):
-            batch = inactive_tasks[i:i+25]
-            await asyncio.gather(*batch)
-            await asyncio.sleep(0.5)
+        if inactive_tasks:
+            for i in range(0, len(inactive_tasks), 25):
+                batch = inactive_tasks[i:i+25]
+                await asyncio.gather(*batch)
+                await asyncio.sleep(0.5)
 
     except Exception as e:
         print(f"❌ خطأ فني في البث: {e}")
@@ -4373,15 +4372,18 @@ async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
         release_db_connection(conn)
 
 async def send_with_retry(user_id, text, reply_markup):
+    """إرسال الرسالة مع التأكد من عدم وجود أزرار لتجنب الأخطاء"""
     try:
         await distribution_bot.send_message(
             chat_id=user_id,
             text=text,
-            reply_markup=reply_markup,
-            parse_mode="HTML"
+            reply_markup=None, # تم إلغاء الأزرار هنا تماماً
+            parse_mode="HTML",
+            disable_web_page_preview=True
         )
     except Exception:
         pass
+
 async def notify_channel(district, content, cust_id):
     if not content: return
     try:
