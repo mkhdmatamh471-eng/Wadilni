@@ -605,19 +605,22 @@ def get_main_kb(role, is_verified=True):
         
         # --- (أ) حالة المراسلة المباشرة ---
         if arg_value.startswith(("direct_", "chat_")):
-            # 1. استخراج الآيدي
+            # 1. استخراج آيدي العميل من الرابط العميق
             customer_id = ''.join(filter(str.isdigit, arg_value.replace("direct_", "").replace("chat_", "")))
             
-            # 2. إنشاء زر "تأكيد" يرسل أمراً للبوت (Callback Query) أو يفتح رابطاً
-            # لتجنب الخطأ، سنرسل رسالة أولى فيها زر "تفعيل الرابط"
-            confirm_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ إظهار زر مراسلة العميل", callback_data=f"show_contact_{customer_id}")]
+            # 2. إنشاء الأزرار (رابط المراسلة المباشر + رابط الاشتراك)
+            # ملاحظة: وضعنا رابط المراسلة كزر "URL" مباشرة لأنه يعمل الآن 
+            # كون المستخدم (السائق) في حالة تفاعل نشط مع البوت.
+            contact_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("👤 مراسلة العميل الآن", url=f"tg://user?id={customer_id}")],
+                [InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/Servecestu")]
             ])
             
+            # 3. إرسال الرسالة النهائية للسائق
             await update.message.reply_text(
-                "🏁 <b>نظام التحقق من الطلبات</b>\n\n"
-                "تم العثور على بيانات العميل بنجاح. اضغط على الزر أدناه لتوليد رابط المراسلة المباشر.",
-                reply_markup=confirm_kb,
+                "✅ <b>تم جلب بيانات التواصل بنجاح!</b>\n\n"
+                "اضغط على الزر أدناه لبدء المحادثة الفورية مع العميل:",
+                reply_markup=contact_kb,
                 parse_mode=ParseMode.HTML
             )
             return
@@ -4294,18 +4297,18 @@ async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
         active_tasks = []
         inactive_tasks = []
 
+        # يوزر البوت الرسمي (تأكد من كتابته بشكل صحيح بدون @)
+        bot_username = "Mishweribot" 
+
         for user_id, expiry in drivers:
-            # التحقق من صلاحية الاشتراك
+            # 1. التحقق من صلاحية الاشتراك
             is_active = False
             if expiry:
                 if expiry.tzinfo is None: 
                     expiry = expiry.replace(tzinfo=timezone.utc)
                 is_active = (expiry > now)
 
-            # تجهيز رابط البوت الآمن ( Deep Link ) بدلاً من الرابط المباشر
-            bot_link = f"https://t.me/Mishweribot?start=direct_{cust_id}"
-
-            # تجهيز محتوى الرسالة الأساسي
+            # 2. تجهيز محتوى الرسالة
             msg_text = (
                 f"🎯 <b>طلب مشوار جديد</b>\n"
                 f"📍 الحي: {district}\n"
@@ -4313,23 +4316,24 @@ async def broadcast_order_to_drivers(district, content, cust_id, cust_name):
                 f"📝 التفاصيل: {content}\n"
             )
 
-            # --- ضبط الإزاحة المطلوبة للأزرار ---
             if is_active:
+                # رابط عميق يوجه السائق للبوت مع آيدي العميل
+                deep_link = f"https://t.me/{bot_username}?start=direct_{cust_id}"
+                
                 kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("💬 مراسلة العميل (آمن)", url=bot_link)
+                    InlineKeyboardButton("💬 الحصول على رابط المراسلة", url=deep_link)
                 ]])
                 footer = "\n✅ اشتراكك فعال"
                 active_tasks.append(send_with_retry(int(user_id), msg_text + footer, kb))
             else:
                 kb = InlineKeyboardMarkup([[
                     InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/Servecestu")
-
                 ]])
-                footer = "\n⚠️ التواصل للمشتركين فقط"
+                footer = "\n⚠️ التواصل متاح للمشتركين فقط"
                 inactive_tasks.append(send_with_retry(int(user_id), msg_text + footer, kb))
 
         # 2. إرسال دفعات المشتركين (أولوية قصوى)
-        print(f"🚀 إرسال لـ {len(active_tasks)} مشترك بروابط آمنة...")
+        print(f"🚀 إرسال لـ {len(active_tasks)} مشترك...")
         for i in range(0, len(active_tasks), 25):
             batch = active_tasks[i:i+25]
             await asyncio.gather(*batch)
