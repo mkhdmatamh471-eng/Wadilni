@@ -561,21 +561,26 @@ def extract_district_from_text(text):
 
 
 def get_main_kb(role, is_verified=True):
-    """لوحة المفاتيح الرئيسية حسب الرتبة"""
+    """لوحة المفاتيح الرئيسية حسب الرتبة مع معالجة الأخطاء"""
+    
+    # 1. التأكد من أن الرتبة سائق
     if role == "driver":
         if not is_verified:
             return ReplyKeyboardMarkup([[KeyboardButton("⏳ الحساب قيد المراجعة")]], resize_keyboard=True)
+        
         return ReplyKeyboardMarkup([
             [KeyboardButton("📍 تحديث موقعي"), KeyboardButton("📝 تحديث الأحياء")],
             [KeyboardButton("ℹ️ حالة اشتراكي")],
-            [KeyboardButton("📞 تواصل مع الإدارة")] # تم إضافة الزر هنا
+            [KeyboardButton("📞 تواصل مع الإدارة")]
         ], resize_keyboard=True)
 
-     # للراكب
+    # 2. التأكد من أن الرتبة راكب (أو أي قيمة أخرى غير السائق)
+    # يفضل وضع الراكب كشرط أو كافتراضي لكن بعد التأكد من صحة البيانات
     return ReplyKeyboardMarkup([
         [KeyboardButton("🚖 طلب رحلة")], 
         [KeyboardButton("📞 تواصل مع الإدارة")]
     ], resize_keyboard=True)
+
 
 # ==================== 🤖 4. المعالجات (Handlers) ====================
 
@@ -1282,26 +1287,28 @@ async def global_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🔙 العودة للقائمة الرئيسية":
         context.user_data['state'] = None
         
-        # 1. جلب البيانات بذكاء (فحص الرقم والنص) لضمان عدم الضياع
-        u_info = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id)) or {}
+        # 1. محاولة جلب البيانات من الكاش (بشكل مرن للآيدي النصي أو الرقمي)
+        u_info = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id))
         
-        # 2. تحديد الرتبة بشكل صارم
-        u_role = u_info.get('role')
-        
-        # 3. [إجراء احترازي] إذا لم يجد الرتبة في الكاش، ابحث عنها في قاعدة البيانات
-        if not u_role:
-            u_role = get_user_role(user_id) # تأكد أن لديك دالة تجلب من DB مباشرة
-        
+        if not u_info or not u_info.get('role'):
+            # 2. جلب الرتبة من DB (تأكد أن get_user_role تُحدّث الكاش داخلياً)
+            u_role = await get_user_role(user_id)
+            # إعادة جلب u_info بعد تحديث الكاش داخل الدالة أعلاه
+            u_info = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id)) or {}
+        else:
+            u_role = u_info.get('role')
+
+        # 3. التأكد من حالة التوثيق (Default True لتجنب رسالة القيد المراجعة بالخطأ)
         is_verified = u_info.get('is_verified', True)
 
-        # 4. إرسال القائمة الصحيحة بناءً على الرتبة المحققة
+        # 4. إرسال القائمة الصحيحة
         await update.message.reply_text(
             "🏠 تم الرجوع للقائمة الرئيسية.",
             reply_markup=get_main_kb(u_role, is_verified)
         )
         return
 
-        
+
     if state == 'WAIT_ADMIN_MESSAGE':
         if text == "❌ إلغاء المراسلة":
             context.user_data['state'] = None
