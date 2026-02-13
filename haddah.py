@@ -2168,33 +2168,37 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
         return
 
+     # --- عند الضغط على زر تفعيل الرابط ---
     if data.startswith("show_contact_"):
         customer_id = data.replace("show_contact_", "")
         
-        # الرابط النهائي
+        # الرابط المباشر للمستخدم
         target_url = f"tg://user?id={customer_id}"
         
+        # إنشاء الزر النهائي للمراسلة
         contact_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("👤 مراسلة العميل الآن", url=target_url)]
+            [InlineKeyboardButton("👤 مراسلة العميل الآن", url=target_url)],
+            [InlineKeyboardButton("💳 اشترك لتفعيل المراسلة", url="https://t.me/Servecestu")] # الزر الذي طلبته سابقاً
         ])
         
-        # تعديل الرسالة نفسها لتظهر زر التواصل
         try:
+            # تحديث الرسالة الحالية لإظهار الزر مباشرة
             await query.edit_message_text(
-                f"✅ <b>الرابط جاهز الآن!</b>\n\n"
-                f"يمكنك التواصل مع العميل عبر الزر أدناه:",
+                "✅ <b>تم توليد رابط التواصل بنجاح!</b>\n\n"
+                "اضغط على الزر أدناه لبدء المحادثة الفورية مع العميل:",
                 reply_markup=contact_kb,
                 parse_mode=ParseMode.HTML
             )
-        except Exception:
-            # إذا رفض تليجرام الزر، نرسله كرابط نصي هايبرلينك (خطة بديلة)
-            mention_link = f'<a href="{target_url}">إضغط هنا لبدء المحادثة</a>'
+        except Exception as e:
+            # في حال وجود قيود خصوصية من تليجرام على الزر، نرسل الرابط كنص كبديل آمن
+            mention_link = f'<a href="{target_url}">اضغط هنا لمراسلة العميل</a>'
             await query.edit_message_text(
-                f"✅ <b>رابط التواصل المباشر:</b>\n\n🔗 {mention_link}",
+                f"✅ <b>رابط التواصل المباشر:</b>\n\n🔗 {mention_link}\n\n"
+                "<i>(استخدم الرابط أعلاه إذا لم يظهر الزر بشكل صحيح)</i>",
                 parse_mode=ParseMode.HTML
             )
-            return
-            
+        return
+
 
     # معالجة الضغط على اسم المدينة
     if data.startswith("city_"):
