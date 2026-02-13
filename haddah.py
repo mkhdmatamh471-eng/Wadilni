@@ -584,6 +584,20 @@ def get_main_kb(role, is_verified=True):
 
 # ==================== 🤖 4. المعالجات (Handlers) ====================
 
+def get_eligible_drivers():
+    conn = get_db_connection()
+    if not conn: return []
+    try:
+        with conn.cursor() as cur:
+            # جلب السائقين النشطين وغير المحظورين
+            cur.execute("""
+                SELECT user_id, subscription_expiry, districts 
+                FROM users 
+                WHERE is_blocked = FALSE AND LOWER(role) = 'driver'
+            """)
+            return cur.fetchall()
+    finally:
+        release_db_connection(conn)
 
 
 
@@ -4298,15 +4312,16 @@ async def admin_show_user_details(update, context, target_id):
 # 1. إعداد البوت بـ Connection Pool عالي للأداء السريع
 
 async def broadcast_order_to_drivers(district, content, cust_name, username, msg_link):
-    print(f"📡 [بدء البث] توزيع الطلب ذكياً...")
+    print(f"📡 [بدء البث] توزيع الطلب ذكياً بناءً على الأحياء...")
     
     conn = get_db_connection()
     if not conn: return
     
     try:
         with conn.cursor() as cur:
+            # تعديل الاستعلام لجلب عمود districts أيضاً
             cur.execute("""
-                SELECT user_id, subscription_expiry 
+                SELECT user_id, subscription_expiry, districts 
                 FROM users 
                 WHERE is_blocked = FALSE AND LOWER(role) = 'driver'
             """)
@@ -4317,8 +4332,7 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
         active_tasks = []
         inactive_tasks = []
 
-        # تحديد الرابط الأفضل للمشتركين
-        # إذا كان اليوزر نيم موجوداً نستخدمه، وإلا نستخدم رابط الرسالة
+        # تحديد الرابط الأفضل للمشتركين (اليوزر أولاً ثم رابط الرسالة)
         if username and username != "None":
             final_link = username
             link_text = "اضغط هنا لمراسلة العميل (عبر اليوزر)"
@@ -4326,16 +4340,27 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
             final_link = msg_link
             link_text = "انتقل للرسالة الأصلية لمراسلة العميل"
 
-        for user_id, expiry in drivers:
+        for user_id, expiry, driver_districts in drivers:
+            # --- منطق الفلترة حسب الحي ---
+            should_receive = False
+            if district == "عام":
+                should_receive = True  # إرسال للكل إذا لم يتحدد حي الطلب
+            elif driver_districts and district in driver_districts:
+                should_receive = True  # إرسال إذا كان حي الطلب موجوداً في نص أحياء السائق
+            
+            if not should_receive:
+                continue # تخطي السائق إذا لم يكن الحي ضمن أحيائه
+            # ---------------------------
+
             is_active = False
             if expiry:
                 if expiry.tzinfo is None: expiry = expiry.replace(tzinfo=timezone.utc)
                 is_active = (expiry > now)
 
             if is_active:
-                # رسالة المشتركين: الرابط الذكي
+                # رسالة المشتركين
                 msg_text = (
-                    f"🎯 <b>طلب مشوار جديد</b>\n\n"
+                    f"🎯 <b>طلب مشوار جديد في أحيائك</b>\n\n"
                     f"📍 الحي: {district}\n"
                     f"👤 العميل: {cust_name}\n"
                     f"📝 التفاصيل: {content}\n\n"
@@ -4345,7 +4370,7 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
                 )
                 active_tasks.append(send_with_retry(int(user_id), msg_text, None))
             else:
-                # رسالة غير المشتركين: رابط حسابك للاشتراك
+                # رسالة غير المشتركين
                 sub_link = "https://t.me/Servecestu"
                 msg_text = (
                     f"🎯 <b>طلب مشوار جديد في {district}</b>\n\n"
@@ -4355,12 +4380,15 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
                 )
                 inactive_tasks.append(send_with_retry(int(user_id), msg_text, None))
 
-        # تنفيذ المهام كما هي في كودك...
+        # تنفيذ الإرسال بنظام الدفعات لتجنب Flood تليجرام
         if active_tasks:
+            print(f"📤 إرسال إلى {len(active_tasks)} سائق مشترك مطابق للحي...")
             for i in range(0, len(active_tasks), 25):
                 await asyncio.gather(*active_tasks[i:i+25])
                 await asyncio.sleep(0.5)
+
         if inactive_tasks:
+            print(f"📤 إرسال إشعارات لـ {len(inactive_tasks)} سائق غير مشترك...")
             for i in range(0, len(inactive_tasks), 25):
                 await asyncio.gather(*inactive_tasks[i:i+25])
                 await asyncio.sleep(0.5)
