@@ -1,6 +1,7 @@
 #!/umainbin/env python3
 # -*- coding: utf-8 -*-
 import pytz
+import html 
 from datetime import datetime, timedelta
 import logging
 import threading
@@ -4343,15 +4344,27 @@ async def admin_show_user_details(update, context, target_id):
 
 # 1. إعداد البوت بـ Connection Pool عالي للأداء السريع
 
+
 async def broadcast_order_to_drivers(district, content, cust_name, username, msg_link):
-    print(f"📡 [بدء البث] توزيع الطلب ذكياً بناءً على الأحياء...")
+    """
+    تقوم ببث الطلب للسائقين بناءً على:
+    1. مطابقة الحي (district) مع عمود (districts) لدى السائق.
+    2. حالة اشتراك السائق (نشط/غير نشط).
+    """
+    
+    # تنظيف اسم الحي لضمان الدقة
+    target_district = district.strip() if district else "عام"
+    
+    print(f"📡 [بدء البث] الحي المستهدف: {target_district} | العميل: {cust_name}")
     
     conn = get_db_connection()
-    if not conn: return
+    if not conn: 
+        print("❌ فشل الاتصال بقاعدة البيانات.")
+        return
     
     try:
         with conn.cursor() as cur:
-            # تعديل الاستعلام لجلب عمود districts أيضاً
+            # جلب السائقين: الآيدي، انتهاء الاشتراك، وقائمة الأحياء المفضلة
             cur.execute("""
                 SELECT user_id, subscription_expiry, districts 
                 FROM users 
@@ -4359,89 +4372,125 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
             """)
             drivers = cur.fetchall()
             
-        if not drivers: return
+        if not drivers:
+            print("⚠️ لا يوجد سائقين متاحين في النظام.")
+            return
+
         now = datetime.now(timezone.utc)
         active_tasks = []
         inactive_tasks = []
 
-        # تحديد الرابط الأفضل للمشتركين (اليوزر أولاً ثم رابط الرسالة)
+        # --- إعداد الروابط الذكية ---
+        # الأولوية لليوزر نيم، ثم رابط الرسالة
         if username and username != "None":
             final_link = username
             link_text = "اضغط هنا لمراسلة العميل (عبر اليوزر)"
         else:
             final_link = msg_link
-            link_text = "انتقل للرسالة الأصلية لمراسلة العميل"
+            link_text = "انتقل لمصدر الطلب لمراسلة العميل"
 
+        # --- حلقة التوزيع والفلترة ---
         for user_id, expiry, driver_districts in drivers:
-            # --- منطق الفلترة حسب الحي ---
-            should_receive = False
-            if district == "عام":
-                should_receive = True  # إرسال للكل إذا لم يتحدد حي الطلب
-            elif driver_districts and district in driver_districts:
-                should_receive = True  # إرسال إذا كان حي الطلب موجوداً في نص أحياء السائق
             
+            # 1. فلترة الأحياء (The Filtering Logic)
+            should_receive = False
+            
+            # تنظيف قائمة أحياء السائق (التعامل مع القيم الفارغة)
+            driver_areas_str = driver_districts if driver_districts else ""
+            
+            if target_district == "عام":
+                # إذا كان الطلب "عام"، يرسل للكل (أو يمكنك حصره بمن اختار "عام")
+                should_receive = True 
+            elif target_district in driver_areas_str:
+                # إذا كان اسم الحي موجوداً ضمن نص أحياء السائق
+                should_receive = True
+            
+            # إذا لم يطابق الشرط، تخطى هذا السائق
             if not should_receive:
-                continue # تخطي السائق إذا لم يكن الحي ضمن أحيائه
-            # ---------------------------
+                continue
 
+            # 2. التحقق من حالة الاشتراك
             is_active = False
             if expiry:
-                if expiry.tzinfo is None: expiry = expiry.replace(tzinfo=timezone.utc)
+                if expiry.tzinfo is None: 
+                    expiry = expiry.replace(tzinfo=timezone.utc)
                 is_active = (expiry > now)
 
+            # 3. صياغة الرسالة حسب الحالة
             if is_active:
-                # رسالة المشتركين
+                # --- للمشتركين: تفاصيل كاملة + رابط ---
                 msg_text = (
                     f"🎯 <b>طلب مشوار جديد في أحيائك</b>\n\n"
-                    f"📍 الحي: {district}\n"
+                    f"📍 الحي: {target_district}\n"
                     f"👤 العميل: {cust_name}\n"
                     f"📝 التفاصيل: {content}\n\n"
                     f"🔗 <a href='{final_link}'>{link_text}</a>\n"
                     f"------------------------\n"
                     f"✅ اشتراكك فعال"
                 )
-                active_tasks.append(send_with_retry(int(user_id), msg_text, None))
+                active_tasks.append(send_with_retry(int(user_id), msg_text))
             else:
-                # رسالة غير المشتركين
+                # --- لغير المشتركين: تشويق + رابط اشتراك ---
                 sub_link = "https://t.me/Servecestu"
                 msg_text = (
-                    f"🎯 <b>طلب مشوار جديد في {district}</b>\n\n"
+                    f"🎯 <b>طلب مشوار جديد في {target_district}</b>\n\n"
                     f"📝 التفاصيل: {content[:40]}...\n\n"
                     f"⚠️ التواصل متاح للمشتركين فقط\n"
                     f"💳 <a href='{sub_link}'>اضغط هنا للاشتراك وتفعيل المراسلة</a>"
                 )
-                inactive_tasks.append(send_with_retry(int(user_id), msg_text, None))
+                inactive_tasks.append(send_with_retry(int(user_id), msg_text))
 
-        # تنفيذ الإرسال بنظام الدفعات لتجنب Flood تليجرام
+        # --- تنفيذ الإرسال بنظام الدفعات (Batching) ---
+        
+        # 1. إرسال للمشتركين (الأولوية)
         if active_tasks:
-            print(f"📤 إرسال إلى {len(active_tasks)} سائق مشترك مطابق للحي...")
+            print(f"📤 جاري الإرسال لـ {len(active_tasks)} سائق مشترك...")
             for i in range(0, len(active_tasks), 25):
                 await asyncio.gather(*active_tasks[i:i+25])
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.5) # حماية من الحظر (Flood Wait)
 
+        # 2. إرسال لغير المشتركين
         if inactive_tasks:
-            print(f"📤 إرسال إشعارات لـ {len(inactive_tasks)} سائق غير مشترك...")
+            print(f"📤 جاري الإرسال لـ {len(inactive_tasks)} سائق غير مشترك...")
             for i in range(0, len(inactive_tasks), 25):
                 await asyncio.gather(*inactive_tasks[i:i+25])
                 await asyncio.sleep(0.5)
 
     except Exception as e:
-        print(f"❌ خطأ فني في البث: {e}")
+        print(f"❌ خطأ فني أثناء البث: {e}")
     finally:
         release_db_connection(conn)
 
-async def send_with_retry(user_id, text, reply_markup):
-    """إرسال الرسالة مع التأكد من عدم وجود أزرار لتجنب الأخطاء"""
+
+
+async def send_with_retry(user_id, text, reply_markup=None):
+    """
+    إرسال الرسالة مع تنظيف النص لضمان عدم انكسار التنسيق
+    """
     try:
+        # ملاحظة: التليجرام يرفض الرسالة إذا كان هناك وسم HTML غير مغلق
+        # لذا نضمن أن النص مرسل بتنسيق HTML سليم
         await distribution_bot.send_message(
             chat_id=user_id,
             text=text,
-            reply_markup=None, # تم إلغاء الأزرار هنا تماماً
+            reply_markup=None, 
             parse_mode="HTML",
             disable_web_page_preview=True
         )
-    except Exception:
-        pass
+    except Exception as e:
+        # إذا فشل الإرسال بسبب التنسيق، نحاول إرساله كنص عادي بدون HTML
+        try:
+            # تنظيف النص من أي وسوم لضمان وصوله كخيار احتياطي
+            clean_text = text.replace("<b>", "").replace("</b>", "").replace("<a>", "").replace("</a>", "").replace("<i>", "").replace("</i>", "")
+            await distribution_bot.send_message(
+                chat_id=user_id,
+                text=f"⚠️ (مشكلة في التنسيق)\n\n{clean_text}",
+                reply_markup=None,
+                parse_mode=None # إرسال بدون تنسيق
+            )
+        except:
+            pass
+
 
 async def notify_channel(district, content, cust_id):
     if not content: return
