@@ -4415,15 +4415,22 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
                 if expiry.tzinfo is None: 
                     expiry = expiry.replace(tzinfo=timezone.utc)
                 is_active = (expiry > now)
+                
+                
 
             # 3. صياغة الرسالة حسب الحالة
             if is_active:
-                # --- للمشتركين: تفاصيل كاملة + رابط ---
+                # تنظيف النصوص لمنع انكسار تنسيق HTML
+                safe_content = html.escape(content)
+                safe_cust_name = html.escape(cust_name)
+                safe_district = html.escape(district)
+
+                # رسالة المشتركين
                 msg_text = (
                     f"🎯 <b>طلب مشوار جديد في أحيائك</b>\n\n"
-                    f"📍 الحي: {target_district}\n"
-                    f"👤 العميل: {cust_name}\n"
-                    f"📝 التفاصيل: {content}\n\n"
+                    f"📍 الحي: {safe_district}\n"
+                    f"👤 العميل: {safe_cust_name}\n"
+                    f"📝 التفاصيل: {safe_content}\n\n"
                     f"🔗 <a href='{final_link}'>{link_text}</a>\n"
                     f"------------------------\n"
                     f"✅ اشتراكك فعال"
