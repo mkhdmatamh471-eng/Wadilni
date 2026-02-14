@@ -2258,9 +2258,11 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f"Error in delivery help: {e}")
 
-    elif data.startswith("toggle_dist_"):
-        # استخراج اسم الحي (الذي يأتي بعد toggle_dist_)
-        dist_name = data.split("_", 2)[2]
+    elif data.startswith("tg_"): # غيرناها لتطابق الأزرار الجديدة
+        # تفكيك: tg_المدينة_الحي
+        parts = data.split("_", 2)
+        current_city = parts[1] # استخراج المدينة من الزر مباشرة (أضمن من context)
+        dist_name = parts[2]    # استخراج اسم الحي
         
         # 1. تحديث الكاش المحلي فوراً (Fast UI)
         if user_id not in USER_CACHE:
@@ -2282,10 +2284,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_districts_str = ",".join(current_list)
         USER_CACHE[user_id]['districts'] = new_districts_str
 
-        # --- الحل: جلب اسم المدينة من context لضمان تحديث القائمة الصحيحة ---
-        current_city = context.user_data.get('current_city', 'جدة')
-
-        # 2. تحديث الواجهة (إعادة رسم الأزرار للمدينة الحالية)
+        # 2. تحديث الواجهة (إعادة رسم الأزرار للمدينة التي جاءت من الزر)
         await show_districts_by_city(update, context, city_name=current_city, is_edit=True)
         
         # إشعار سريع (Notification popup)
@@ -2306,11 +2305,10 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception as db_e:
                     print(f"DB Save Error: {db_e}")
                 finally:
-                    release_db_connection(conn)
+                    if conn: release_db_connection(conn)
         
         threading.Thread(target=save_db).start()
         return
-
 
     elif data.startswith("admin_u_info_"):
         target_id = data.split("_")[3]
@@ -4361,21 +4359,21 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
                 driver_areas_list = []
 
             # ج. منطق الفلترة (Core Logic)
+                        # ج. منطق الفلترة (المعدل لضمان خصوصية أحياء المشتركين)
             should_receive = False
 
-            if target_district == "عام":
-                # الطلبات العامة تذهب للجميع
-                should_receive = True
-            
-            elif is_active:
-                # للمشتركين: يجب أن يكون الحي موجوداً "بالضبط" في القائمة
+            if is_active:
+                # للمشتركين: يستلم فقط إذا كان الحي (محدداً أو عاماً) موجوداً في قائمته الشخصية
                 if target_district in driver_areas_list:
                     should_receive = True
+                # اختياري: إذا أردت المشترك أن يستلم الطلبات "العامة" أيضاً أضف:
+                # elif target_district == "عام":
+                #     should_receive = True
             
             else:
                 # لغير المشتركين: يستلمون كل شيء (كدعاية)
-                # إذا كنت تريد حصرهم بأحيائهم أيضاً، غير هذا الشرط ليكون مثل المشتركين
                 should_receive = True
+
 
             # تخطي السائق إذا لم يطابق الشروط
             if not should_receive:
