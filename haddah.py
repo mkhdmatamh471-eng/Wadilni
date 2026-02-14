@@ -4390,32 +4390,31 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
             link_text = "انتقل لمصدر الطلب لمراسلة العميل"
 
         # --- حلقة التوزيع والفلترة ---
+             # --- حلقة التوزيع والفلترة (المعدلة) ---
         for user_id, expiry, driver_districts in drivers:
             
-            # 1. فلترة الأحياء (The Filtering Logic)
-            should_receive = False
-            
-            # تنظيف قائمة أحياء السائق (التعامل مع القيم الفارغة)
-            driver_areas_str = driver_districts if driver_districts else ""
-            
-            if target_district == "عام":
-                # إذا كان الطلب "عام"، يرسل للكل (أو يمكنك حصره بمن اختار "عام")
-                should_receive = True 
-            elif target_district in driver_areas_str:
-                # إذا كان اسم الحي موجوداً ضمن نص أحياء السائق
-                should_receive = True
-            
-            # إذا لم يطابق الشرط، تخطى هذا السائق
-            if not should_receive:
-                continue
-
-            # 2. التحقق من حالة الاشتراك
+            # 1. التحقق من حالة الاشتراك أولاً
             is_active = False
             if expiry:
                 if expiry.tzinfo is None: 
                     expiry = expiry.replace(tzinfo=timezone.utc)
                 is_active = (expiry > now)
-                
+            
+            # 2. منطق الفلترة المزدوج
+            should_receive = False
+            driver_areas_str = driver_districts if driver_districts else ""
+
+            if is_active:
+                # للمشتركين: يجب مطابقة الحي
+                if target_district == "عام" or target_district in driver_areas_str:
+                    should_receive = True
+            else:
+                # لغير المشتركين: يستلم كل المشاوير بدون فلترة أحياء
+                should_receive = True
+
+            # إذا لم يستوفِ الشرط (للمشتركين فقط)، نتخطاه
+            if not should_receive:
+                continue
                 
 
             # 3. صياغة الرسالة حسب الحالة
