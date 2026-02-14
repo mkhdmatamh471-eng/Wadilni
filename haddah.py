@@ -4479,31 +4479,30 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
 
 async def send_with_retry(user_id, text, reply_markup=None):
     """
-    إرسال الرسالة مع تنظيف النص لضمان عدم انكسار التنسيق
+    إرسال الرسالة مع دعم الأزرار (reply_markup) والتنظيف الاحتياطي
     """
     try:
-        # ملاحظة: التليجرام يرفض الرسالة إذا كان هناك وسم HTML غير مغلق
-        # لذا نضمن أن النص مرسل بتنسيق HTML سليم
         await distribution_bot.send_message(
             chat_id=user_id,
             text=text,
-            reply_markup=None, 
+            reply_markup=reply_markup, # التعديل هنا: مررنا المتغير بدلاً من None
             parse_mode="HTML",
             disable_web_page_preview=True
         )
     except Exception as e:
-        # إذا فشل الإرسال بسبب التنسيق، نحاول إرساله كنص عادي بدون HTML
+        print(f"⚠️ فشل التنسيق لـ {user_id}: {e}")
         try:
-            # تنظيف النص من أي وسوم لضمان وصوله كخيار احتياطي
-            clean_text = text.replace("<b>", "").replace("</b>", "").replace("<a>", "").replace("</a>", "").replace("<i>", "").replace("</i>", "")
+            # تنظيف يدوي للوسوم في حال انكسار الـ HTML
+            import re
+            clean_text = re.sub('<[^<]+?>', '', text)
             await distribution_bot.send_message(
                 chat_id=user_id,
                 text=f"⚠️ (مشكلة في التنسيق)\n\n{clean_text}",
-                reply_markup=None,
-                parse_mode=None # إرسال بدون تنسيق
+                reply_markup=reply_markup, # نرسل الأزرار حتى في المحاولة الاحتياطية
+                parse_mode=None 
             )
-        except:
-            pass
+        except Exception as e2:
+            print(f"❌ فشل الإرسال النهائي: {e2}")
 
 
 async def notify_channel(district, content, cust_id):
