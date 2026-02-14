@@ -2150,8 +2150,9 @@ async def show_districts_by_city(update: Update, context: ContextTypes.DEFAULT_T
                 d_name = all_districts[i + j]
                 status = "✅ " if d_name in current_list else "❌ "
                 # نرسل toggle_dist_ لتمييزه عن الأزرار الأخرى
-                row.append(InlineKeyboardButton(f"{status}{d_name}", callback_data=f"toggle_dist_{d_name}"))
+                row.append(InlineKeyboardButton(f"{status}{d_name}", callback_data=f"tg_{city_name}_{d_name}"))
         keyboard.append(row)
+       
 
     keyboard.append([InlineKeyboardButton("💾 حفظ وإنهاء", callback_data="driver_home")])
     reply_markup = InlineKeyboardMarkup(keyboard)
