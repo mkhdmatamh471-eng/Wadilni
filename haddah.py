@@ -4307,22 +4307,17 @@ async def admin_show_user_details(update, context, target_id):
 
 async def broadcast_order_to_drivers(district, content, cust_name, username, msg_link):
     """
-    تقوم ببث الطلب للسائقين مع فلترة دقيقة للأحياء للمشتركين.
+    تقوم ببث الطلب للسائقين مع فلترة دقيقة للأحياء وتوفير أزرار تواصل مزدوجة.
     """
-    
-    # 1. تنظيف اسم الحي
     target_district = district.strip() if district else "عام"
-    
     print(f"📡 [بدء البث] الحي المستهدف: {target_district} | العميل: {cust_name}")
     
     conn = get_db_connection()
     if not conn: 
-        print("❌ فشل الاتصال بقاعدة البيانات.")
         return
     
     try:
         with conn.cursor() as cur:
-            # جلب البيانات الضرورية فقط
             cur.execute("""
                 SELECT user_id, subscription_expiry, districts 
                 FROM users 
@@ -4331,112 +4326,85 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
             drivers = cur.fetchall()
             
         if not drivers:
-            print("⚠️ لا يوجد سائقين متاحين في النظام.")
             return
 
         now = datetime.now(timezone.utc)
         active_tasks = []
         inactive_tasks = []
 
-        # 2. إعداد الروابط (مرة واحدة خارج الحلقة لتحسين الأداء)
-        if username and username != "None":
-            final_link = username
-            link_text = "اضغط هنا لمراسلة العميل (عبر اليوزر)"
-        else:
-            final_link = msg_link
-            link_text = "انتقل لمصدر الطلب لمراسلة العميل"
+        # --- 1. بناء لوحة أزرار التواصل للمشتركين (Double Buttons) ---
+        driver_keyboard = []
+        
+        # الزر الأول: الخاص (يعمل فقط إذا كان هناك يوزرنيم)
+        if username and username != "None" and username.startswith("http"):
+            driver_keyboard.append([InlineKeyboardButton(text=f"👤 مراسلة العميل (خاص)", url=username)])
+        
+        # الزر الثاني: مصدر الطلب (الخيار المضمون لفتح الخاص من المجموعة)
+        if msg_link and msg_link.startswith("http"):
+            driver_keyboard.append([InlineKeyboardButton(text="🔗 اذهب لمصدر الطلب (القروب)", url=msg_link)])
 
-        # 3. حلقة التوزيع والفلترة
+        reply_markup_active = InlineKeyboardMarkup(driver_keyboard) if driver_keyboard else None
+
+        # --- 2. حلقة التوزيع والفلترة ---
         for user_id, expiry, driver_districts in drivers:
-            
-            # أ. تحديد حالة الاشتراك
             is_active = False
             if expiry:
-                if expiry.tzinfo is None: 
-                    expiry = expiry.replace(tzinfo=timezone.utc)
+                if expiry.tzinfo is None: expiry = expiry.replace(tzinfo=timezone.utc)
                 is_active = (expiry > now)
             
-            # ب. تجهيز قائمة أحياء السائق (تحويل النص إلى قائمة فعلية)
-            # مثال: "الروضة,النسيم" -> ['الروضة', 'النسيم']
-            if driver_districts:
-                driver_areas_list = [d.strip() for d in driver_districts.split(',')]
-            else:
-                driver_areas_list = []
+            driver_areas_list = [d.strip() for d in driver_districts.split(',')] if driver_districts else []
 
-            # ج. منطق الفلترة (Core Logic)
-                        # ج. منطق الفلترة (المعدل لضمان خصوصية أحياء المشتركين)
-                        # ج. منطق الفلترة (Core Logic) - النسخة المحدثة لحي "عام"
+            # منطق الفلترة
             should_receive = False
-
             if is_active:
-                # 1. إذا كان السائق مفعلاً خيار "عام" في قائمته، يستلم كل الطلبات فوراً
-                if "عام" in driver_areas_list:
+                if "عام" in driver_areas_list or target_district in driver_areas_list:
                     should_receive = True
-                
-                # 2. إذا كان الحي المستهدف (target_district) موجوداً في قائمة السائق
-                elif target_district in driver_areas_list:
-                    should_receive = True
-                
-                # 3. إذا كان الطلب نفسه "عام" (الرادار لم يحدد حي)، 
-                # هل تريد إرساله لكل المشتركين؟ 
-                # التعديل أدناه يرسله فقط لمن اختار "عام" لتقليل الإزعاج:
                 elif target_district == "عام":
-                    # إذا أردت إرساله للكل اجعلها True، إذا أردت خصوصية أكثر ابقها False
                     should_receive = False 
-            
             else:
-                # لغير المشتركين: يستلمون كل شيء كدعاية
-                should_receive = True
+                should_receive = True # لغير المشتركين كدعاية
 
-            # تخطي السائق إذا لم يطابق الشروط
             if not should_receive:
                 continue
 
-            # 4. صياغة الرسالة
+            # صياغة الرسالة بتنسيق HTML نظيف
             safe_content = html.escape(content)
             safe_cust_name = html.escape(cust_name)
             safe_district_display = html.escape(target_district)
 
             if is_active:
-                # --- للمشتركين ---
-                     # --- للمشتركين ---
+                # --- تنسيق المشتركين ---
                 msg_text = (
-                    f"🎯 <b>طلب مشوار جديد في أحيائك</b>\n\n"
-                    f"📍 الحي: {safe_district_display}\n"
-                    f"👤 العميل: {safe_cust_name}\n"
-                    f"📝 التفاصيل:\n{safe_content}\n"  # التعديل هنا: أضفنا سطر جديد قبل المحتوى
-                    f"------------------------\n"
-                    f"✅ اشتراكك فعال"
+                    f"🎯 <b>طلب مشوار جديد في أحيائك</b>\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"📍 <b>الحي:</b> {safe_district_display}\n"
+                    f"👤 <b>العميل:</b> {safe_cust_name}\n"
+                    f"📝 <b>التفاصيل:</b>\n{safe_content}\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"✅ <i>اضغط على الأزرار بالأسفل للتواصل</i>"
                 )
-                keyboard = [[InlineKeyboardButton(text=link_text, url=final_link)]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                active_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=reply_markup))
+                active_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=reply_markup_active))
             
             else:
-                # --- لغير المشتركين ---
-                       # --- لغير المشتركين ---
+                # --- تنسيق غير المشتركين ---
                 sub_link = "https://t.me/Servecestu"
                 msg_text = (
-                    f"🎯 <b>طلب مشوار جديد في {safe_district_display}</b>\n\n"
-                    f"📝 التفاصيل:\n{safe_content}\n\n"  # التعديل هنا: سطر جديد لضمان استيعاب كامل النص
-                    f"⚠️ التواصل متاح للمشتركين فقط"
+                    f"🎯 <b>طلب مشوار جديد في {safe_district_display}</b>\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"📝 <b>التفاصيل:</b>\n{safe_content}\n\n"
+                    f"⚠️ <b>التواصل متاح للمشتركين فقط</b>\n"
+                    f"━━━━━━━━━━━━━━"
                 )
-                keyboard = [[InlineKeyboardButton(text="💳 اضغط هنا للاشتراك وتفعيل المراسلة", url=sub_link)]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                inactive_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=reply_markup))
+                keyboard_sub = InlineKeyboardMarkup([[InlineKeyboardButton(text="💳 اشتراك وتفعيل المراسلة", url=sub_link)]])
+                inactive_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=keyboard_sub))
 
-        # 5. تنفيذ الإرسال (Batching)
-        # تم تقليل الدفعة إلى 20 لتجنب Timeout
+        # تنفيذ البث على دفعات
         if active_tasks:
-            print(f"📤 جاري الإرسال لـ {len(active_tasks)} سائق مشترك...")
             for i in range(0, len(active_tasks), 20):
                 await asyncio.gather(*active_tasks[i:i+20])
                 await asyncio.sleep(0.5)
 
         if inactive_tasks:
-            print(f"📤 جاري الإرسال لـ {len(inactive_tasks)} سائق غير مشترك...")
             for i in range(0, len(inactive_tasks), 20):
                 await asyncio.gather(*inactive_tasks[i:i+20])
                 await asyncio.sleep(0.5)
