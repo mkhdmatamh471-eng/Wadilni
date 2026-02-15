@@ -4310,6 +4310,16 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
     تقوم ببث الطلب للسائقين مع فلترة دقيقة للأحياء وتوفير أزرار تواصل مزدوجة.
     """
     target_district = district.strip() if district else "عام"
+        # --- منطق تحديد المدينة ديناميكياً ---
+    detected_city = ""
+    for city, districts in CITIES_DISTRICTS.items():
+        if target_district in districts:
+            detected_city = city
+            break
+    
+    # صياغة اسم المدينة للعنوان
+    city_suffix = f" في {detected_city}" if detected_city else ""
+    
     print(f"📡 [بدء البث] الحي المستهدف: {target_district} | العميل: {cust_name}")
     
     conn = get_db_connection()
@@ -4375,7 +4385,7 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
             if is_active:
                 # --- تنسيق المشتركين ---
                 msg_text = (
-                    f"🎯 <b>طلب مشوار جديد في أحيائك</b>\n"
+                    f"🎯 <b>طلب مشوار جديد{city_suffix}</b>\n"
                     f"━━━━━━━━━━━━━━\n"
                     f"📍 <b>الحي:</b> {safe_district_display}\n"
                     f"👤 <b>العميل:</b> {safe_cust_name}\n"
@@ -4389,11 +4399,12 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
                 # --- تنسيق غير المشتركين ---
                 sub_link = "https://t.me/Servecestu"
                 msg_text = (
-                    f"🎯 <b>طلب مشوار جديد في {safe_district_display}</b>\n"
+                    f"🎯 <b>طلب مشوار جديد{city_suffix}</b>\n"
                     f"━━━━━━━━━━━━━━\n"
-                    f"📝 <b>التفاصيل:</b>\n{safe_content}\n\n"
-                    f"⚠️ <b>التواصل متاح للمشتركين فقط</b>\n"
-                    f"━━━━━━━━━━━━━━"
+                    f"📍 <b>الحي:</b> {safe_district_display}\n"
+                    f"📝 <b>التفاصيل:</b>\n{safe_content}\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"⚠️ <b>التواصل متاح للمشتركين فقط</b>"
                 )
                 keyboard_sub = InlineKeyboardMarkup([[InlineKeyboardButton(text="💳 اشتراك وتفعيل المراسلة", url=sub_link)]])
                 inactive_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=keyboard_sub))
