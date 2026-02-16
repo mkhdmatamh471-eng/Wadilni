@@ -1391,15 +1391,28 @@ async def global_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if conn:
         try:
             with conn.cursor() as cur:
+                # التحقق من وجود دردشة نشطة
                 cur.execute("SELECT partner_id FROM active_chats WHERE user_id = %s", (user_id,))
                 row = cur.fetchone()
+                
                 if row:
                     partner_id = row[0]
-                    # هنا نمرر الرسالة للطرف الآخر
-                    await context.bot.send_message(chat_id=partner_id, text=text)
-                    return # نخرج فوراً (لا نريد قراءة الحي أثناء الدردشة)
+                    try:
+                        # إرسال الرسالة للطرف الآخر
+                        await context.bot.send_message(chat_id=partner_id, text=text)
+                        return  # الخروج لمنع معالجة الرسالة كطلب مشوار
+                    except Exception as send_err:
+                        print(f"❌ فشل إرسال الرسالة للشريك {partner_id}: {send_err}")
+                        # اختياري: يمكنك هنا مسح الدردشة من الجدول إذا كان الحساب محظوراً
+        
+        except Exception as db_err:
+            print(f"❌ خطأ في استعلام الدردشة النشطة: {db_err}")
+            
         finally:
+            # ضروري جداً لإعادة الاتصال للمسبح (Pool)
             release_db_connection(conn)
+    else:
+        print("⚠️ تعذر الحصول على اتصال بقاعدة البيانات لـ global_handler")
 
     # --- 5. العزل الذكي للسائق ---
     
