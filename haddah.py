@@ -4320,20 +4320,21 @@ async def admin_show_user_details(update, context, target_id):
 
 async def broadcast_order_to_drivers(district, content, cust_name, username, msg_link):
     """
-    تقوم ببث الطلب للسائقين مع فلترة دقيقة للأحياء وتوفير أزرار تواصل مزدوجة.
+    تقوم ببث الطلب لجميع السائقين المسجلين (اعتبار الكل مشتركين)
+    مع فلترة الأحياء فقط.
     """
     target_district = district.strip() if district else "عام"
-        # --- منطق تحديد المدينة ديناميكياً ---
+    
+    # --- منطق تحديد المدينة ديناميكياً ---
     detected_city = ""
     for city, districts in CITIES_DISTRICTS.items():
         if target_district in districts:
             detected_city = city
             break
     
-    # صياغة اسم المدينة للعنوان
     city_suffix = f" في {detected_city}" if detected_city else ""
     
-    print(f"📡 [بدء البث] الحي المستهدف: {target_district} | العميل: {cust_name}")
+    print(f"📡 [بدء البث المفتوح] الحي: {target_district} | العميل: {cust_name}")
     
     conn = get_db_connection()
     if not conn: 
@@ -4341,8 +4342,9 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
     
     try:
         with conn.cursor() as cur:
+            # جلب جميع السائقين غير المحظورين فقط
             cur.execute("""
-                SELECT user_id, subscription_expiry, districts 
+                SELECT user_id, districts 
                 FROM users 
                 WHERE is_blocked = FALSE AND LOWER(role) = 'driver'
             """)
@@ -4351,90 +4353,61 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
         if not drivers:
             return
 
-        now = datetime.now(timezone.utc)
-        active_tasks = []
-        inactive_tasks = []
+        all_send_tasks = []
 
-        # --- 1. بناء لوحة أزرار التواصل للمشتركين (Double Buttons) ---
+        # --- بناء لوحة أزرار التواصل الموحدة ---
         driver_keyboard = []
-        
-        # الزر الأول: الخاص (يعمل فقط إذا كان هناك يوزرنيم)
         if username and username != "None" and username.startswith("http"):
             driver_keyboard.append([InlineKeyboardButton(text=f"👤 مراسلة العميل (خاص)", url=username)])
         
-        # الزر الثاني: مصدر الطلب (الخيار المضمون لفتح الخاص من المجموعة)
         if msg_link and msg_link.startswith("http"):
             driver_keyboard.append([InlineKeyboardButton(text="🔗 اذهب لمصدر الطلب (القروب)", url=msg_link)])
 
-        reply_markup_active = InlineKeyboardMarkup(driver_keyboard) if driver_keyboard else None
+        reply_markup = InlineKeyboardMarkup(driver_keyboard) if driver_keyboard else None
 
-        # --- 2. حلقة التوزيع والفلترة ---
-        for user_id, expiry, driver_districts in drivers:
-            is_active = False
-            if expiry:
-                if expiry.tzinfo is None: expiry = expiry.replace(tzinfo=timezone.utc)
-                is_active = (expiry > now)
+        # --- حلقة التوزيع والفلترة ---
+        for user_id, driver_districts in drivers:
             
             driver_areas_list = [d.strip() for d in driver_districts.split(',')] if driver_districts else []
 
-            # منطق الفلترة
+            # منطق فلترة الأحياء (يستلم إذا كان الحي مطابقاً أو إذا اختار السائق "عام")
             should_receive = False
-            if is_active:
-                if "عام" in driver_areas_list or target_district in driver_areas_list:
-                    should_receive = True
-                elif target_district == "عام":
-                    should_receive = False 
-            else:
-                should_receive = True # لغير المشتركين كدعاية
+            if "عام" in driver_areas_list or target_district in driver_areas_list:
+                should_receive = True
+            elif target_district == "عام":
+                # إذا كان الطلب عاماً، يصل للجميع بغض النظر عن أحيائهم
+                should_receive = True
 
             if not should_receive:
                 continue
 
-            # صياغة الرسالة بتنسيق HTML نظيف
+            # صياغة الرسالة
             safe_content = html.escape(content)
             safe_cust_name = html.escape(cust_name)
             safe_district_display = html.escape(target_district)
 
-            if is_active:
-                # --- تنسيق المشتركين ---
-                msg_text = (
-                    f"🎯 <b>طلب مشوار جديد{city_suffix}</b>\n"
-                    f"━━━━━━━━━━━━━━\n"
-                    f"📍 <b>الحي:</b> {safe_district_display}\n"
-                    f"👤 <b>العميل:</b> {safe_cust_name}\n"
-                    f"📝 <b>التفاصيل:</b>\n{safe_content}\n"
-                    f"━━━━━━━━━━━━━━\n"
-                    f"✅ <i>اضغط على الأزرار بالأسفل للتواصل</i>"
-                )
-                active_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=reply_markup_active))
+            msg_text = (
+                f"🎯 <b>طلب مشوار جديد{city_suffix}</b>\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"📍 <b>الحي:</b> {safe_district_display}\n"
+                f"👤 <b>العميل:</b> {safe_cust_name}\n"
+                f"📝 <b>التفاصيل:</b>\n{safe_content}\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"✅ <i>اضغط على الأزرار بالأسفل للتواصل</i>"
+            )
             
-            else:
-                # --- تنسيق غير المشتركين ---
-                sub_link = "https://t.me/Servecestu"
-                msg_text = (
-                    f"🎯 <b>طلب مشوار جديد{city_suffix}</b>\n"
-                    f"━━━━━━━━━━━━━━\n"
-                    f"📍 <b>الحي:</b> {safe_district_display}\n"
-                    f"📝 <b>التفاصيل:</b>\n{safe_content}\n"
-                    f"━━━━━━━━━━━━━━\n"
-                    f"⚠️ <b>التواصل متاح للمشتركين فقط</b>"
-                )
-                keyboard_sub = InlineKeyboardMarkup([[InlineKeyboardButton(text="💳 اشتراك وتفعيل المراسلة", url=sub_link)]])
-                inactive_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=keyboard_sub))
+            # إضافة المهمة للقائمة الموحدة
+            all_send_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=reply_markup))
 
-        # تنفيذ البث على دفعات
-        if active_tasks:
-            for i in range(0, len(active_tasks), 20):
-                await asyncio.gather(*active_tasks[i:i+20])
-                await asyncio.sleep(0.5)
-
-        if inactive_tasks:
-            for i in range(0, len(inactive_tasks), 20):
-                await asyncio.gather(*inactive_tasks[i:i+20])
-                await asyncio.sleep(0.5)
+        # --- تنفيذ البث على دفعات لضمان عدم توقف البوت (Batching) ---
+        if all_send_tasks:
+            print(f"📤 جاري الإرسال لـ {len(all_send_tasks)} سائق...")
+            for i in range(0, len(all_send_tasks), 20):
+                await asyncio.gather(*all_send_tasks[i:i+20])
+                await asyncio.sleep(0.5) # حماية من Flood Wait وتجنب Pool Timeout
 
     except Exception as e:
-        print(f"❌ خطأ فني أثناء البث: {e}")
+        print(f"❌ خطأ فني أثناء البث المفتوح: {e}")
     finally:
         release_db_connection(conn)
 
