@@ -198,27 +198,24 @@ def release_db_connection(conn):
 # ==========================================
 
 async def update_db_silent(user_id, lat, lon):
-    """تحديث الموقع في الخلفية بشكل آمن تماماً"""
-    
-    def db_task():
-        # جلب الاتصال داخل الخيط لضمان استقرار الـ SSL
-        conn = get_db_connection()
-        if not conn: return
-        try:
+    """تحديث الموقع في الخلفية دون تعطيل البوت"""
+    conn = get_db_connection()
+    if not conn: return
+
+    try:
+        def db_task():
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE users SET lat = %s, lon = %s, last_location_update = NOW() WHERE user_id = %s",
                     (lat, lon, user_id)
                 )
                 conn.commit()
-        except Exception as e:
-            print(f"❌ خطأ في تحديث الموقع (Thread): {e}")
-        finally:
-            # تحرير الاتصال داخل نفس الخيط
-            release_db_connection(conn)
-    
-    # تشغيل المهمة بالكامل في خيط منفصل
-    await asyncio.to_thread(db_task)
+        
+        await asyncio.to_thread(db_task)
+    except Exception as e:
+        print(f"❌ خطأ في تحديث الموقع الخلفي: {e}")
+    finally:
+        release_db_connection(conn)
 
 def get_chat_partner(user_id):
     """جلب معرف الطرف الآخر من قاعدة البيانات"""
@@ -366,53 +363,85 @@ LAST_DB_UPDATE = {}
 
 
 def init_db():
+    """إنشاء المجمع، الجداول، وتحديث الأعمدة الناقصة"""
     global db_pool
+    
+    # 1. إنشاء المجمع أولاً إذا لم يكن موجوداً
     if db_pool is None:
         try:
-            # استخدام Threaded لموافقة asyncio.to_thread
-            db_pool = pool.ThreadedConnectionPool(1, 15, dsn=DB_URL, sslmode='require')
-            print("✅ مجمع الاتصالات جاهز.")
+            db_pool = pool.SimpleConnectionPool(
+                1, 15, # عدد الاتصالات (الأدنى والأقصى)
+                dsn=DB_URL,
+                sslmode='require'
+            )
+            print("✅ تم تجهيز مجمع اتصالات قاعدة البيانات.")
         except Exception as e:
-            print(f"❌ فشل المجمع: {e}")
+            print(f"❌ فشل إنشاء المجمع: {e}")
             return
 
+    # 2. الحصول على اتصال من المجمع المجهز
     conn = get_db_connection()
-    if not conn: return
+    if not conn: 
+        print("❌ تعذر الحصول على اتصال لتحديث الجداول.")
+        return
 
     try:
-        # استخدام الـ autocommit يقلل من عبء الـ SSL handshake
-        conn.autocommit = True 
         with conn.cursor() as cur:
-            setup_query = """
-            CREATE TABLE IF NOT EXISTS chat_logs (
-                log_id SERIAL PRIMARY KEY, sender_id BIGINT, receiver_id BIGINT,
-                message_content TEXT, msg_type TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE TABLE IF NOT EXISTS users (
-                user_id BIGINT PRIMARY KEY, chat_id BIGINT, role TEXT,
-                name TEXT, phone TEXT, car_info TEXT, districts TEXT,
-                lat FLOAT DEFAULT 0.0, lon FLOAT DEFAULT 0.0,
-                is_blocked BOOLEAN DEFAULT FALSE, is_verified BOOLEAN DEFAULT FALSE,
-                subscription_expiry TIMESTAMPTZ, balance FLOAT DEFAULT 0.0
-            );
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS balance FLOAT DEFAULT 0.0;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS last_location_update TIMESTAMPTZ;
-            CREATE TABLE IF NOT EXISTS active_chats (
-                user_id BIGINT PRIMARY KEY, partner_id BIGINT, start_time TIMESTAMPTZ DEFAULT NOW()
-            );
-            """
-            cur.execute(setup_query)
-            print("✅ قاعدة البيانات جاهزة (أبحر الشمالية - العميل B).")
+
+            # إنشاء الجدول الأساسي
+
+            # إنشاء جدول سجلات الدردشة
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS chat_logs (
+                    log_id SERIAL PRIMARY KEY,
+                    sender_id BIGINT,
+                    receiver_id BIGINT,
+                    message_content TEXT,
+                    msg_type TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id BIGINT PRIMARY KEY,
+                    chat_id BIGINT,
+                    role TEXT,
+                    name TEXT,
+                    phone TEXT,
+                    car_info TEXT,
+                    districts TEXT,
+                    lat FLOAT DEFAULT 0.0,
+                    lon FLOAT DEFAULT 0.0,
+                    is_blocked BOOLEAN DEFAULT FALSE,
+                    is_verified BOOLEAN DEFAULT FALSE,
+                    subscription_expiry TIMESTAMPTZ,
+                    balance FLOAT DEFAULT 0.0
+                );
+            """)
+            # التأكد من وجود عمود الرصيد (للتحديثات القديمة)
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS balance FLOAT DEFAULT 0.0;")
+            conn.commit()
+            # ... (بعد إنشاء جدول users)
+
+            # إنشاء جدول المحادثات النشطة
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS active_chats (
+                    user_id BIGINT PRIMARY KEY,
+                    partner_id BIGINT,
+                    start_time TIMESTAMPTZ DEFAULT NOW()
+                );
+            """)
+            conn.commit()
+
+            print("✅ قاعدة البيانات جاهزة.")
     except Exception as e:
-        print(f"❌ خطأ SSL/DB أثناء التهيئة: {e}")
+        print(f"❌ خطأ في تهيئة قاعدة البيانات: {e}")
     finally:
-        # فحص حالة الاتصال قبل محاولة تعديله لتجنب InterfaceError
-        if conn and not conn.closed:
-            try:
-                conn.autocommit = False
-            except:
-                pass
+        # هذا السطر سيعمل دائماً سواء نجح الكود أو فشل
+        # وهو الذي يضمن تحرير الاتصال للمجمع (Pool)
         release_db_connection(conn)
+
 
 def save_chat_log(sender_id, receiver_id, content, msg_type="text"):
     """دالة مساعدة لحفظ الرسائل في قاعدة البيانات"""
