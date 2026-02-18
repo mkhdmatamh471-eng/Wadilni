@@ -3664,44 +3664,53 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
                 matched_drivers.append(d)
 
         if matched_drivers:
-            # 1. إشعار الراكب (أول 10 كباتن متاحين في الحي)
             drivers_to_show = matched_drivers[:10]
-            
             kb = []
+            
             for d in drivers_to_show:
-                # التحقق من وجود يوزر نيم أولاً
+                # محاولة استخدام اليوزرنيم أولاً كخيار أفضل
                 if d.get('username') and d.get('username') != "None":
-                    direct_contact_url = f"https://t.me/{d['username']}"
-                    kb.append([InlineKeyboardButton(
-                        text=f"🚖 مراسلة الكابتن {d.get('name', 'متاح')} (مباشر)", 
-                        url=direct_contact_url
-                    )])
+                    url = f"https://t.me/{d['username']}"
                 else:
-                    # إذا لم يوجد يوزر نيم، نتجنب رابط الـ ID المباشر لمنع الانهيار
-                    # بدلاً من ذلك، نوجه الراكب للبحث عنه أو نضع رابط البوت
-                    continue # أو يمكنك إضافة زر يوجه لبروفايل البوت كخيار بديل
+                    # إذا لم يوجد، نستخدم معرف السائق (User ID)
+                    url = f"tg://user?id={d['user_id']}"
+                
+                kb.append([InlineKeyboardButton(
+                    text=f"🚖 مراسلة الكابتن {d.get('name', 'متاح')} (مباشر)", 
+                    url=url
+                )])
 
-            # حماية إرسال الرسالة بالكامل من الانهيار
+            # --- محاولة الإرسال مع معالجة أخطاء الخصوصية ---
             try:
-                if kb:
-                    await update.message.reply_text(
-                        f"✅ أبشر يا {user.first_name}، وجدنا كباتن متاحين في حي **{found_dist}**:\n"
-                        "اضغط على اسم الكابتن لمراسلته فوراً:",
-                        reply_markup=InlineKeyboardMarkup(kb),
-                        parse_mode="Markdown"
-                    )
-                else:
-                    # في حال كان كل الكباتن مغلقي الخصوصية ولا يملكون يوزر نيم
-                    await update.message.reply_text(
-                        f"📍 وجدنا كباتن في حي **{found_dist}** ولكن حساباتهم تتطلب إضافة مسبقة. حاول التواصل في القروب العام."
-                    )
+                await update.message.reply_text(
+                    f"✅ أبشر يا {user.first_name}، وجدنا كباتن متاحين في حي **{found_dist}**:\n"
+                    "اضغط على اسم الكابتن لمراسلته فوراً:",
+                    reply_markup=InlineKeyboardMarkup(kb),
+                    parse_mode="Markdown"
+                )
             except telegram.error.BadRequest as e:
+                # إذا فشل الإرسال بسبب خصوصية أحد السائقين (الخطأ Button_user_privacy_restricted)
                 if "Button_user_privacy_restricted" in str(e):
-                    print(f"⚠️ تم منع زر بسبب خصوصية المستخدم")
-                    # محاولة إرسال الرسالة بدون الأزرار المسببة للمشكلة
-                    await update.message.reply_text(f"✅ وجدنا كباتن في حي **{found_dist}**، يرجى انتظار تواصلهم معك عبر الخاص.")
+                    # حل بديل: فلترة الأزرار لإبقاء الآمن منها فقط (اليوزرنيم فقط)
+                    safe_kb = []
+                    for d in drivers_to_show:
+                        if d.get('username') and d.get('username') != "None":
+                            safe_kb.append([InlineKeyboardButton(
+                                text=f"🚖 مراسلة الكابتن {d.get('name', 'متاح')} (مباشر)", 
+                                url=f"https://t.me/{d['username']}"
+                            )])
+                    
+                    if safe_kb:
+                        await update.message.reply_text(
+                            f"✅ وجدنا كباتن في حي **{found_dist}**.\nتنبيه: بعض الكباتن حساباتهم محمية، تظهر فقط حسابات اليوزرنيم:",
+                            reply_markup=InlineKeyboardMarkup(safe_kb),
+                            parse_mode="Markdown"
+                        )
+                    else:
+                        await update.message.reply_text(f"📍 وجدنا كباتن في حي **{found_dist}**، ولكن حساباتهم محمية بالخصوصية. يرجى انتظار تواصلهم معك.")
                 else:
-                    raise e
+                    # إذا كان الخطأ شيئاً آخر، نطبعه في السجل
+                    print(f"Error: {e}")
 
 
             # 2. إرسال إشعارات خاصة للكباتن
