@@ -3593,7 +3593,6 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = user.id
 
     # --- 1. نظام منع التكرار (Cooldown) ---
-    # يمنع المستخدم من تفعيل البوت أكثر من مرة كل 30 ثانية في المجموعات
     now = datetime.now()
     if user_id in user_cooldowns and (now - user_cooldowns[user_id]) < timedelta(seconds=30):
         return
@@ -3603,103 +3602,73 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     msg_clean = clean_text(text)
 
-    # --- 2. فلتر الجدية (طول النص) ---
-    # إذا كانت الرسالة أقل من 7 حروف غالباً ليست طلباً جاداً (مثل كلمة "حي" فقط)
     if len(msg_clean) < 7:
         return
 
-    # --- 3. الكلمات الدلالية للنية ---
-    KEYWORDS_INTENT = ["مشوار", "توصيل", "سواق", "كابتن", "سياره", "ابي", "بغيت", "وصلني", "بكم", "موجود", "فاضي", "رايح"]
+    # --- 2. الكلمات الدلالية للنية ---
+    KEYWORDS_INTENT = [
+    # الكلمات الأصلية التي وضعتها
+    "مشوار", "توصيل", "سواق", "سائق", "كابتن", "سياره", "سيارة", 
+    "ابي", "ابغى", "بغيت", "محتاج", "وصلني", "يوديني", 
+    "بكم", "موجود", "فاضي", "رايح", "حرك", "طريقي", "مين"
+]
+
     has_intent = any(k in msg_clean for k in KEYWORDS_INTENT)
 
-    # =================================================
-    # 1. نظام الحماية والطلبات الشهرية
-    # =================================================
-    
-    # =================================================
-    # 2. البحث الذكي عن الحي والمدينة
-    # =================================================
+    # --- 3. البحث الذكي عن الحي والمدينة ---
     found_dist = None
     found_city = None
 
     for city, districts in CITIES_DISTRICTS.items():
         for dist in districts:
             cleaned_dist = clean_text(dist)
-            # شرط صارم: يجب أن يكون اسم الحي كلمة مستقلة وليس جزءاً من كلمة أخرى
             if f" {cleaned_dist} " in f" {msg_clean} ":
                 found_dist = dist
                 found_city = city
                 break
         if found_dist: break
 
-    # =================================================
-    # 3. معالجة النتائج (ذكاء الرد)
-    # =================================================
-    
-    # حالة أ: وجدنا حي + نية طلب (أعلى درجات التأكد)
-        # =================================================
-    # حالة أ: وجدنا حي + نية طلب (إرسال للكباتن والراكب)
-    # =================================================
-  
-    # 5. معالجة الطلب في حال وجود حي ونية
+    # --- 4. معالجة الطلب في حال وجود حي ونية (بدون شرط اشتراك) ---
     if found_dist and has_intent:
-        user_cooldowns[user_id] = now  # تحديث وقت آخر طلب
-        await sync_all_users() # تحديث بيانات السائقين من DB للكاش
+        user_cooldowns[user_id] = now
+        await sync_all_users() # تحديث الكاش
         
-        current_time = datetime.now(KSA_TZ)
         matched_drivers = []
 
-        # فلترة السائقين (مشتركين + غير محظورين + نفس الحي)
+        # فلترة السائقين: (فقط غير محظور + نفس الحي)
         for d in CACHED_DRIVERS:
-            expiry = d.get('subscription_expiry')
-            if not expiry: continue
-
-            # توحيد المنطقة الزمنية للمقارنة
-            if expiry.tzinfo is None:
-                expiry = pytz.utc.localize(expiry).astimezone(KSA_TZ)
-            else:
-                expiry = expiry.astimezone(KSA_TZ)
-
-            # الشرط النهائي لإظهار السائق
+            # تم إزالة فحص التاريخ (expiry) هنا تماماً
+            
             if (d.get('role') == 'driver' and 
                 not d.get('is_blocked', False) and 
-                expiry > current_time and 
                 d.get('districts') and 
                 clean_text(found_dist) in clean_text(d['districts'])):
                 matched_drivers.append(d)
 
         if matched_drivers:
-            # 1. إشعار الراكب (أول 10 كباتن مشتركين فقط)
+            # 1. إشعار الراكب (أول 10 كباتن متاحين في الحي)
             drivers_to_show = matched_drivers[:10]
             
             kb = []
             for d in drivers_to_show:
-                # تجهيز رابط التواصل المباشر:
-                # إذا كان للسائق يوزر نيم نستخدمه، وإذا لم يوجد نستخدم رابط الـ ID المباشر
                 if d.get('username'):
                     direct_contact_url = f"https://t.me/{d['username']}"
                 else:
                     direct_contact_url = f"tg://user?id={d['user_id']}"
                 
-                # إضافة الزر برابط التواصل المباشر
                 kb.append([InlineKeyboardButton(
-                    text=f"🚖 مراسلة الكابتن {d['name']} (مباشر)", 
+                    text=f"🚖 مراسلة الكابتن {d.get('name', 'متاح')} (مباشر)", 
                     url=direct_contact_url
                 )])
             
             await update.message.reply_text(
-                f"✅ أبشر يا {user.first_name}، وجدنا كباتن **مشتركين** متاحين في حي **{found_dist}**:\n"
+                f"✅ أبشر يا {user.first_name}، وجدنا كباتن متاحين في حي **{found_dist}**:\n"
                 "اضغط على اسم الكابتن لمراسلته فوراً:",
                 reply_markup=InlineKeyboardMarkup(kb),
                 parse_mode="Markdown"
             )
 
-            # 2. إرسال الإشعارات الخاصة للسائقين المشتركين
-            # (نفس كود الإرسال السابق مع الأزرار الشفافة)
-            # ... كود إرسال driver_msg ...
-
-            # 2. إرسال إشعارات خاصة للكباتن المتاحين
-            # إنشاء رابط التواصل مع العميل (إذا كان لديه يوزر نيم أو عبر الآيدي)
+            # 2. إرسال إشعارات خاصة للكباتن
             client_url = f"https://t.me/{user.username}" if user.username else f"tg://user?id={user.id}"
             
             driver_msg = (
@@ -3710,7 +3679,6 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
                 f"🚀 يمكنك مراسلة العميل الآن عبر الزر أدناه:"
             )
             
-            # إنشاء زر المراسلة
             driver_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("💬 مراسلة العميل", url=client_url)]
             ])
@@ -3724,34 +3692,25 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
                         parse_mode="Markdown"
                     )
                 except:
-                    # في حال قام الكابتن بحظر البوت
-                    pass
+                    pass # في حال حظر السائق للبوت
 
         else:
-            # في حال لم يتم العثور على كباتن
+            # في حال لم يتم العثور على كباتن في هذا الحي
             await update.message.reply_text(
-                f"📍 حي **{found_dist}** ({found_city}):\nلا يوجد كباتن مسجلين بالحي حالياً، اطلب كابتن عبر الخريطة:",
+                f"📍 حي **{found_dist}** ({found_city}):\nلا يوجد كباتن متوفرين في هذا الحي حالياً، اطلب عبر الخريطة:",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(f"🌍 طلب أقرب كابتن (GPS)", url=f"https://t.me/{context.bot.username}?start=order_general")]]),
                 parse_mode="Markdown"
             )
         return
 
-    # حالة ب: نية طلب واضحة لكن لم يذكر الحي أو الحي غير مدرج
-        # =================================================
-    # 4. فحص نية الطلب العامة (عند ذكر كلمة مشوار)
-    # =================================================
-        # =================================================
     # الرد التلقائي عند كتابة كلمة "مشوار" فقط
-    # =================================================
     elif msg_clean == "مشوار":
-        # نظام تبريد لمنع التكرار المزعج (60 ثانية)
         now = datetime.now()
         if user_id in user_cooldowns and (now - user_cooldowns[user_id]) < timedelta(seconds=60):
             return
 
         user_cooldowns[user_id] = now
         
-        # أزرار الوصول السريع
         welcome_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("📍 اطلب مشوار عبر GPS 📍", url=f"https://t.me/{context.bot.username}?start=order_general")],
             [InlineKeyboardButton("🚕 تسجيل كابتن جديد", url=f"https://t.me/{context.bot.username}?start=driver_reg")]
@@ -3764,10 +3723,6 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode="Markdown"
         )
         return
-
-
-
-
 
 
 async def handle_chat_proxy(update: Update, context: ContextTypes.DEFAULT_TYPE):
