@@ -99,6 +99,21 @@ CITIES_DISTRICTS = {
         "طريق المدينة", "طريق الهدا", "الراشدية", "وادي نعمان"
     ],
     
+    
+    "نجران": [
+        "عام", "الفيصلية", "أبا السعود", "العريسة", "الخالدية", "الفهد", 
+        "المخيم", "الضباط", "الغويلا", "دحضة", "الجربة", "القابل", 
+        "آل منجم", "صاغر", "رجلأ", "الشرفة", "الحصينية", "الموفجة", 
+        "نهوقة", "تسلال", "الحضن", "زور وادعة", "المخاضة", "الصهي", 
+        "العشرة", "الأثايبة", "الصناعية", "بئر عسكر", "الغرفة", "المراطة", 
+        "سقام", "العويرة", "الجفر", "المصلولة", "تصلال", "خراشة", "شرورة",
+        "المشعلية", "الوديعة", "خباش", "يدمة", "بدر الجنوب", "حبونا", "ثار",
+        "مخطط باصنيب", "مخطط الأثايبة", "مخطط الغويلا", "مخطط الشرفة",
+        "مطار نجران", "جامعة نجران", "نجران مول", "الأخدود", "سوق البلد",
+        "منتزه الملك فهد", "الغابة", "طريق الملك عبدالعزيز", "طريق الامير نايف",
+        "حي صاغر", "السحيم", "قطن", "بئر منوش", "المنار", "الاندلس", "الرويس"
+    ],
+   
     "جدة": [
         "عام", "مطار الملك عبدالعزيز", "محطة قطار الحرمين", "الكورنيش", "الواجهة البحرية",
         "الروضة", "الخالدية", "الشاطئ", "الزهراء", "السلامة", "النعيم", "البساتين",
@@ -2232,7 +2247,8 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [
                 InlineKeyboardButton("🕋 أحياء مكة", callback_data="city_مكة المكرمة"),
-                InlineKeyboardButton("🏙️ أحياء جدة", callback_data="city_جدة")
+                InlineKeyboardButton("🏙️ أحياء جدة", callback_data="city_جدة"),
+                InlineKeyboardButton("🏙️ أحياء نجران", callback_data="city_نجران")
             ],
             [InlineKeyboardButton("🔙 العودة للقائمة", callback_data="driver_main_menu")]
         ]
@@ -3332,7 +3348,9 @@ async def districts_settings_view(update: Update, context: ContextTypes.DEFAULT_
     keyboard = [
         [
             InlineKeyboardButton("🏙️ جدة", callback_data="city_جدة"),
-            InlineKeyboardButton("🕋 مكة المكرمة", callback_data="city_مكة المكرمة")
+            InlineKeyboardButton("🕋 مكة المكرمة", callback_data="city_مكة المكرمة"),
+            InlineKeyboardButton("🏙️ أحياء نجران", callback_data="city_نجران")
+
         ],
         [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_panel_view")]
     ]
