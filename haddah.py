@@ -3669,22 +3669,40 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             kb = []
             for d in drivers_to_show:
-                if d.get('username'):
+                # التحقق من وجود يوزر نيم أولاً
+                if d.get('username') and d.get('username') != "None":
                     direct_contact_url = f"https://t.me/{d['username']}"
+                    kb.append([InlineKeyboardButton(
+                        text=f"🚖 مراسلة الكابتن {d.get('name', 'متاح')} (مباشر)", 
+                        url=direct_contact_url
+                    )])
                 else:
-                    direct_contact_url = f"tg://user?id={d['user_id']}"
-                
-                kb.append([InlineKeyboardButton(
-                    text=f"🚖 مراسلة الكابتن {d.get('name', 'متاح')} (مباشر)", 
-                    url=direct_contact_url
-                )])
-            
-            await update.message.reply_text(
-                f"✅ أبشر يا {user.first_name}، وجدنا كباتن متاحين في حي **{found_dist}**:\n"
-                "اضغط على اسم الكابتن لمراسلته فوراً:",
-                reply_markup=InlineKeyboardMarkup(kb),
-                parse_mode="Markdown"
-            )
+                    # إذا لم يوجد يوزر نيم، نتجنب رابط الـ ID المباشر لمنع الانهيار
+                    # بدلاً من ذلك، نوجه الراكب للبحث عنه أو نضع رابط البوت
+                    continue # أو يمكنك إضافة زر يوجه لبروفايل البوت كخيار بديل
+
+            # حماية إرسال الرسالة بالكامل من الانهيار
+            try:
+                if kb:
+                    await update.message.reply_text(
+                        f"✅ أبشر يا {user.first_name}، وجدنا كباتن متاحين في حي **{found_dist}**:\n"
+                        "اضغط على اسم الكابتن لمراسلته فوراً:",
+                        reply_markup=InlineKeyboardMarkup(kb),
+                        parse_mode="Markdown"
+                    )
+                else:
+                    # في حال كان كل الكباتن مغلقي الخصوصية ولا يملكون يوزر نيم
+                    await update.message.reply_text(
+                        f"📍 وجدنا كباتن في حي **{found_dist}** ولكن حساباتهم تتطلب إضافة مسبقة. حاول التواصل في القروب العام."
+                    )
+            except telegram.error.BadRequest as e:
+                if "Button_user_privacy_restricted" in str(e):
+                    print(f"⚠️ تم منع زر بسبب خصوصية المستخدم")
+                    # محاولة إرسال الرسالة بدون الأزرار المسببة للمشكلة
+                    await update.message.reply_text(f"✅ وجدنا كباتن في حي **{found_dist}**، يرجى انتظار تواصلهم معك عبر الخاص.")
+                else:
+                    raise e
+
 
             # 2. إرسال إشعارات خاصة للكباتن
             client_url = f"https://t.me/{user.username}" if user.username else f"tg://user?id={user.id}"
