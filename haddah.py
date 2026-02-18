@@ -3612,7 +3612,7 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     # --- 1. نظام منع التكرار (Cooldown) ---
     now = datetime.now()
-    if user_id in user_cooldowns and (now - user_cooldowns[user_id]) < timedelta(seconds=30):
+    if user_id in user_cooldowns and (now - user_cooldowns[user_id]) < timedelta(seconds=2):
         return
     
     def clean_text(t):
