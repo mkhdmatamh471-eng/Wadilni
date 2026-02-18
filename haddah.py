@@ -1,5 +1,5 @@
 #!/umainbin/env python3
-# -*- coding: utf-8 -*-
+# -*- co: utf-8 -*-
 import pytz
 import html 
 from datetime import datetime, timedelta
@@ -4331,7 +4331,7 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
                 should_receive = True
             elif target_district == "عام":
                 # إذا كان الطلب عاماً، يصل للجميع بغض النظر عن أحيائهم
-                should_receive = True
+                should_receive = False
 
             if not should_receive:
                 continue
