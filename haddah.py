@@ -3602,7 +3602,7 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     msg_clean = clean_text(text)
 
-    if len(msg_clean) < 7:
+    if len(msg_clean) < 4:
         return
 
     # --- 2. الكلمات الدلالية للنية ---
