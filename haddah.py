@@ -3668,20 +3668,20 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
             kb = []
             
             for d in drivers_to_show:
-                # محاولة استخدام اليوزرنيم أولاً كخيار أفضل
-                if d.get('username') and d.get('username') != "None":
-                    url = f"https://t.me/{d['username']}"
-                else:
-                    # إذا لم يوجد، نستخدم معرف السائق (User ID)
-                    url = f"tg://user?id={d['user_id']}"
+                # جلب المعرف من قاعدة البيانات
+                d_id = d.get('user_id')
+                d_name = d.get('name', 'كابتن متاح')
+                
+                # استخدام الرابط الذي طلبته بناءً على تجرتبك
+                direct_url = f"tg://openmessage?user_id={d_id}"
                 
                 kb.append([InlineKeyboardButton(
-                    text=f"🚖 مراسلة الكابتن {d.get('name', 'متاح')} (مباشر)", 
-                    url=url
+                    text=f"🚖 مراسلة {d_name}", 
+                    url=direct_url
                 )])
 
-            # --- محاولة الإرسال مع معالجة أخطاء الخصوصية ---
             try:
+                # محاولة إرسال الرسالة للأعضاء في القروب
                 await update.message.reply_text(
                     f"✅ أبشر يا {user.first_name}، وجدنا كباتن متاحين في حي **{found_dist}**:\n"
                     "اضغط على اسم الكابتن لمراسلته فوراً:",
@@ -3689,28 +3689,15 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
                     parse_mode="Markdown"
                 )
             except telegram.error.BadRequest as e:
-                # إذا فشل الإرسال بسبب خصوصية أحد السائقين (الخطأ Button_user_privacy_restricted)
+                # معالجة استثنائية في حال رفض تيليجرام الرابط لأي سبب
                 if "Button_user_privacy_restricted" in str(e):
-                    # حل بديل: فلترة الأزرار لإبقاء الآمن منها فقط (اليوزرنيم فقط)
-                    safe_kb = []
-                    for d in drivers_to_show:
-                        if d.get('username') and d.get('username') != "None":
-                            safe_kb.append([InlineKeyboardButton(
-                                text=f"🚖 مراسلة الكابتن {d.get('name', 'متاح')} (مباشر)", 
-                                url=f"https://t.me/{d['username']}"
-                            )])
-                    
-                    if safe_kb:
-                        await update.message.reply_text(
-                            f"✅ وجدنا كباتن في حي **{found_dist}**.\nتنبيه: بعض الكباتن حساباتهم محمية، تظهر فقط حسابات اليوزرنيم:",
-                            reply_markup=InlineKeyboardMarkup(safe_kb),
-                            parse_mode="Markdown"
-                        )
-                    else:
-                        await update.message.reply_text(f"📍 وجدنا كباتن في حي **{found_dist}**، ولكن حساباتهم محمية بالخصوصية. يرجى انتظار تواصلهم معك.")
+                    print(f"⚠️ خصوصية المستخدم {d_id} منعت إنشاء الزر")
+                    await update.message.reply_text(
+                        f"📍 وجدنا كباتن في حي **{found_dist}**، ولكن يرجى منهم التواصل معك مباشرة بسبب إعدادات الخصوصية لديهم."
+                    )
                 else:
-                    # إذا كان الخطأ شيئاً آخر، نطبعه في السجل
-                    print(f"Error: {e}")
+                    # أي خطأ آخر يتم تسجيله دون إيقاف البوت
+                    print(f"🚨 خطأ تقني: {e}")
 
 
             # 2. إرسال إشعارات خاصة للكباتن
