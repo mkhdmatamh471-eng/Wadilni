@@ -1,5 +1,5 @@
 #!/umainbin/env python3
-# -*- co: utf-8 -*-
+# -*- coding: utf-8 -*-
 import pytz
 import html 
 from datetime import datetime, timedelta
@@ -18,11 +18,10 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardR
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from psycopg2 import pool
-from datetime import datetime, timezone 
+from datetime import datetime, timezone # هذا السطر هو الحل للمشكلة
 from telegram import Bot, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.request import HTTPXRequest
-
-# 1. إعداد البوت بـ Connection Pool عالي للأداء السريع
+        
 # مكتبات Flask والويب
 from flask import Flask
 
@@ -45,10 +44,6 @@ from telegram.request import HTTPXRequest
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import MessageHandler, filters, ContextTypes, ChatMemberHandler
 from psycopg2 import pool
-KSA_TZ = pytz.timezone('Asia/Riyadh')
-user_cooldowns = {}
-
-
 # إعداد السيرفر لـ Render
 app = Flask('')
 
@@ -69,68 +64,44 @@ def run_flask():
 
 # 🔴🔴 هام: بيانات الاتصال (يفضل وضعها في متغيرات بيئة لاحقاً)
 
-BOT_TOKEN = "8588537913:AAF8yxyeQBHbpdN4aJHpfp5-DUxFvQaUb10"
-ADMIN_IDS = [7996171713, 7513630480, 8549859150]
+BOT_TOKEN = "8498451295:AAGt1R7THllSjYtEe5hvIEPnPhRkS_iBcnU"
+ADMIN_IDS = [7513630480, 7580027135, 8498451295]
+# ضع هنا الآيدي الخاص بحسابك (الذي يعمل عليه اليوزر بوت)
+RADAR_ACCOUNT_ID = 8563113166  # استبدله بالآيدي الصحيح
 
-RADAR_ACCOUNT_ID = 8549859150
-CHANNEL_ID = -1003843717541 
 # الكلمات المفتاحية للبحث في المجموعات
-msg_request = HTTPXRequest(connection_pool_size=50, connect_timeout=10)
+CHANNEL_ID = -1001671410526 
+msg_request = HTTPXRequest(connection_pool_size=50, connect_timeout=10)
 distribution_bot = Bot(token=BOT_TOKEN, request=msg_request)
 
-
-# --- 1. إعدادات الأحياء الذكية (جدة و مكة) ---
+# --- 1. إعدادات الأحياء الذكية (المدينة المنورة) ---
 CITIES_DISTRICTS = {
-    "مكة المكرمة": [
-        "عام", "الحرم", "المسجد الحرام", "برج الساعة", "جبل عمر", "التنعيم",
-        "الشوقية", "العزيزية", "الرصيفة", "بطحاء قريش", "العوالي", "الشرائع", 
-        "النزهة", "الزايدي", "ولي العهد", "الكعكية", "المسفلة", "العتيبية",
-        "النوارية", "العمرة", "البحيرات", "جبل النور", "سلطانة", "الخالدية",
-        "الزاهر", "الشهداء", "الفيحاء", "العدل", "الغسالة", "جبل السيدة",
-        "الششة", "الروضة", "المعابدة", "جرول", "التيسير", "ريع بخش", "اجياد",
-        "الهجرة", "كدي", "الملك فهد", "الاسكان", "الشبيكة", "القشلة", "الحجون",
-        "المنصور", "الهنداوية", "الطنباوي", "الزهراء", "الضيافة", "الجامعة",
-        "مخطط البنك", "مخطط الشريف", "الخنساء", "الجميزة", "الملاوي", "المعيصم",
-        "الغزال", "الحكير", "النسيم", "جعرانة", "شرائع المجاهدين", "شرائع النخل", 
-        "العكيشية", "الخضراء", "الراشدية", "الوسيق", "بئر الغنم", "وادي جليل", 
-        "مقرح", "الشرشورة", "أم الجود", "محطة القطار", "قطار الحرمين", "مكة مول", 
-        "الحجاز مول", "سوق الضيافة", "الحمرة", "المرسلات", "العسيلة", "التقوى",
-        "المهاجرين", "الهدا", "الشميسي", "عرفات", "مزدلفة", "منى", "طريق الليث", 
-        "طريق المدينة", "طريق الهدا", "الراشدية", "وادي نعمان"
-    ],
-    
-    
-    "نجران": [
-        "عام", "الفيصلية", "أبا السعود", "العريسة", "الخالدية", "الفهد", 
-        "المخيم", "الضباط", "الغويلا", "دحضة", "الجربة", "القابل", 
-        "آل منجم", "صاغر", "رجلأ", "الشرفة", "الحصينية", "الموفجة", 
-        "نهوقة", "تسلال", "الحضن", "زور وادعة", "المخاضة", "الصهي", 
-        "العشرة", "الأثايبة", "الصناعية", "بئر عسكر", "الغرفة", "المراطة", 
-        "سقام", "العويرة", "الجفر", "المصلولة", "تصلال", "خراشة", "شرورة",
-        "المشعلية", "الوديعة", "خباش", "يدمة", "بدر الجنوب", "حبونا", "ثار",
-        "مخطط باصنيب", "مخطط الأثايبة", "مخطط الغويلا", "مخطط الشرفة",
-        "مطار نجران", "جامعة نجران", "نجران مول", "الأخدود", "سوق البلد",
-        "منتزه الملك فهد", "الغابة", "طريق الملك عبدالعزيز", "طريق الامير نايف",
-        "حي صاغر", "السحيم", "قطن", "بئر منوش", "المنار", "الاندلس", "الرويس"
-    ],
-   
-    "جدة": [
-        "عام", "مطار الملك عبدالعزيز", "محطة قطار الحرمين", "الكورنيش", "الواجهة البحرية",
-        "الروضة", "الخالدية", "الشاطئ", "الزهراء", "السلامة", "النعيم", "البساتين",
-        "المرجان", "المحمدية", "أبحر الشمالية", "أبحر الجنوبية", "النزهة", "الربوة",
-        "البوادي", "الصفا", "المروة", "الفيصلية", "أبحر", "زمرد", "الياقوت", 
-        "اللؤلؤ", "الفنار", "أعالي جدة", "جوهرة العروس", "الفروسية", "التحلية", 
-        "الاندلس", "الحمراء", "الرويس", "الشرفية", "مشرفة", "العزيزية", "الرحاب", 
-        "النسيم", "بني مالك", "الورود", "الفيحاء", "الثغر", "الروابي", "السليمانية", 
-        "السامر", "المنار", "الاجواد", "الالفيية", "الحمدانية", "الصالحية", "الرحمانية", 
-        "الريان", "الكوثر", "الفلاح", "طيبة", "التيسير", "بريمان", "النخيل", 
-        "البلد", "البغدادية", "السبيل", "الهنداوية", "الكندرة", "الوزيرية", 
-        "الجوهرة", "السنابل", "الاجاويد", "الخمرة", "القرينية", "المطار", 
-        "الحرازات", "المحاميد", "وادي مريخ", "حي ام السلم", "مدائن الفهد", 
-        "غليل", "بترومين", "القريات", "المحجر", "الهدى", "العدل", "القوزين", 
-        "الصناعية", "عسفان", "خليج سلمان", "درة العروس", "ذهبان", "الفروسية",
-        "الرد سي مول", "عزيز مول", "الأندلس مول", "هيفاء مول", "مجمع العرب",
-        "جامعة الملك عبدالعزيز", "جامعة جدة", "استاد الجوهرة", "حي الشفاء"
+    "المدينة المنورة": [
+        "عام", "أبو مرخة", "أبيار علي", "الأسواف", "البخاري", "الإسكان", "البحر",
+        "البدراني", "الجمعة", "الجرف", "الحزام", "الحمراء", "الخاتم", "الخالدية", 
+        "الدائرة", "الدائري", "الدويخله", "الدويمة", "الدعيثة", "الرانونا", "الرناونة", 
+        "الربوة", "السيح", "الشروق", "الشرق", "الشهداء", "الشيبية", "الظاهرة", 
+        "العاقول", "العالية", "العوالي", "العريض", "العزيزية", "العصبة", 
+        "العنابس", "العنبرية", "العيون", "الفتح", "القبلتين", "القارات", "المبعوث", 
+        "المطار", "المغيسله", "الملك فهد", "الملك فيصل", "المناخة", "المصانع", 
+        "النور", "النبلاء", "النقيع", "النقمي", "الهجرة", "الواحة", "الوادي", 
+        "بئر الماشي", "بئر عثمان", "باقدو", "بني حارثة", "بني ظفر", "تلال علي", 
+        "تلال", "حمراء الأسد", "دفاع", "ذو الحليفة", "رهط", "سيد الشهداء", 
+        "سلطانة", "سكة الحديد", "السقيا", "شظاة", "شوران", "عروة", "قباء", 
+        "قربان", "مخطط التلال", "مهزور", "وعيرة", "تلعة الهبوب", 
+        "الزهراء", "الفيحاء", "المنار", "سكن الحرس", "السديري", "المطار القديم",
+        "السكب", "الورود", "الراية", "القصواء", "الهدى", "الروابي", "الريان",
+        "الجابرة", "الرويعي", "المطار الجديد", "المزيني", "المعذر", 
+        "الخليل", "حي الخليل", "النصر", "حي النصر", "كتانة", "البركة", "الجسر", 
+        "المخطط", "حي الملك فهد", "حي المطار", "الحرم", "المسجد النبوي", 
+        "مسجد قباء", "مسجد القبلتين", "الميقات", "ابيار علي", "محطة القطار", 
+        "قطار الحرمين", "المحطة", "سابتكو", "النقل الجماعي", "جامعة طيبة", 
+        "الجامعة الإسلامية", "الكلية التقنية", "جامعة الامير مقرن", "النور مول", 
+        "الراشد مول", "العالية مول", "المنار مول", "مزايا مول", "توب تن", 
+        "سوق الخضار", "سوق التمور", "الحجاز مول", "سوق البدر", "مستشفى الملك فهد", 
+        "مستشفى أحد", "المستشفى العسكري", "مستشفى الحرس", "مستشفى الولادة", 
+        "مستشفى الميقات", "المواساة", "مستشفى الدار", "الطب الدولي", 
+        "المنطقة المركزية", "المركزية", "باب السلام", "باب المجيدي", "فندق", "أجنحة"
     ]
 }
 
@@ -290,36 +261,32 @@ def end_chat_session(user_id):
     return partner_id
 
 async def get_user_role(user_id):
-    """جلب الرتبة وتحديث الكاش (معدلة للعمل مع Pool)"""
-    # فحص الكاش أولاً للسرعة
-    if str(user_id) in USER_CACHE:
-        return USER_CACHE[str(user_id)].get('role', 'rider')
-
+    uid_str = str(user_id)
+    uid_int = int(user_id)
     conn = get_db_connection()
     if not conn: return 'rider'
 
     try:
         def query():
             with conn.cursor() as cur:
-                cur.execute("SELECT role, is_verified FROM users WHERE user_id = %s", (user_id,))
-                return cur.fetchone()
+                cur.execute("SELECT * FROM users WHERE user_id = %s", (uid_int,))
+                columns = [desc[0] for desc in cur.description]
+                row = cur.fetchone()
+                return dict(zip(columns, row)) if row else None
         
-        result = await asyncio.to_thread(query)
+        user_data = await asyncio.to_thread(query)
         
-        if result:
-            role = result[0]
-            is_verified = result[1]
-            # تحديث الكاش
-            USER_CACHE[str(user_id)] = {'role': role, 'is_verified': is_verified, 'user_id': user_id}
-            return role
+        if user_data:
+            # ✅ التعديل: تخزين البيانات تحت المفتاح النصي والرقمي لضمان الوصول السريع
+            USER_CACHE[uid_str] = user_data
+            USER_CACHE[uid_int] = user_data
+            return user_data.get('role', 'rider')
         return 'rider'
     except Exception as e:
-        print(f"❌ خطأ في get_user_role: {e}")
+        print(f"❌ Database Fetch Error: {e}")
         return 'rider'
     finally:
         release_db_connection(conn)
-
-
 
 def normalize_text(text):
     if not text: return ""
@@ -603,30 +570,24 @@ def extract_district_from_text(text):
 
 
 def get_main_kb(role, is_verified=True):
-    """لوحة المفاتيح الرئيسية حسب الرتبة مع معالجة الأخطاء"""
-    
-    # 1. التأكد من أن الرتبة سائق
+    """لوحة المفاتيح الرئيسية حسب الرتبة"""
     if role == "driver":
         if not is_verified:
             return ReplyKeyboardMarkup([[KeyboardButton("⏳ الحساب قيد المراجعة")]], resize_keyboard=True)
-        
         return ReplyKeyboardMarkup([
             [KeyboardButton("📍 تحديث موقعي"), KeyboardButton("📝 تحديث الأحياء")],
             [KeyboardButton("ℹ️ حالة اشتراكي")],
-            [KeyboardButton("📞 تواصل مع الإدارة")]
+            [KeyboardButton("📞 تواصل مع الإدارة")] # تم إضافة الزر هنا
         ], resize_keyboard=True)
 
-    # 2. التأكد من أن الرتبة راكب (أو أي قيمة أخرى غير السائق)
-    # يفضل وضع الراكب كشرط أو كافتراضي لكن بعد التأكد من صحة البيانات
+     # للراكب
     return ReplyKeyboardMarkup([
         [KeyboardButton("🚖 طلب رحلة")], 
         [KeyboardButton("📞 تواصل مع الإدارة")]
     ], resize_keyboard=True)
 
-
 # ==================== 🤖 4. المعالجات (Handlers) ====================
-
-def get_eligible_drivers():
+def get_eligible_drivers():
     conn = get_db_connection()
     if not conn: return []
     try:
@@ -640,10 +601,8 @@ def get_main_kb(role, is_verified=True):
             return cur.fetchall()
     finally:
         release_db_connection(conn)
-
-
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+       
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
@@ -666,7 +625,7 @@ def get_main_kb(role, is_verified=True):
             
             # 2. تجهيز الروابط
             direct_url = f"tg://user?id={customer_id}"
-            sub_url = "https://t.me/Servecestu"
+            sub_url = "https://t.me/x3FreTx"
             
             # 3. محاولة إرسال الزر المباشر
             contact_kb = InlineKeyboardMarkup([
@@ -1103,7 +1062,7 @@ async def complete_registration(update, context, name, phone=None, plate=None):
         if role == 'driver':
             support_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("💬 مراسلة الإدارة", callback_data="contact_admin_start")],
-                [InlineKeyboardButton("👤 الحساب المباشر", url="https://t.me/Servecestu")]
+                [InlineKeyboardButton("👤 الحساب المباشر", url="https://t.me/x3FreTx")]
             ])
             
             await context.bot.send_message(
@@ -1366,22 +1325,22 @@ async def global_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- 3. معالجة زر العودة والقائمة الرئيسية ---
     if text == "🔙 العودة للقائمة الرئيسية":
         context.user_data['state'] = None
+        user_id = update.effective_user.id
         
-        # 1. محاولة جلب البيانات من الكاش (بشكل مرن للآيدي النصي أو الرقمي)
-        u_info = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id))
+        # 1. جلب البيانات بذكاء (فحص الرقم والنص) لضمان عدم الضياع
+        u_info = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id)) or {}
         
-        if not u_info or not u_info.get('role'):
-            # 2. جلب الرتبة من DB (تأكد أن get_user_role تُحدّث الكاش داخلياً)
-            u_role = await get_user_role(user_id)
-            # إعادة جلب u_info بعد تحديث الكاش داخل الدالة أعلاه
-            u_info = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id)) or {}
-        else:
-            u_role = u_info.get('role')
-
-        # 3. التأكد من حالة التوثيق (Default True لتجنب رسالة القيد المراجعة بالخطأ)
+        # 2. تحديد الرتبة بشكل صارم
+        u_role = u_info.get('role')
+        
+        # 3. [إجراء احترازي] إذا لم يجد الرتبة في الكاش، ابحث عنها في قاعدة البيانات
+        if not u_role:
+            # تم إضافة await لأن دالتك async def get_user_role
+            u_role = await get_user_role(user_id) 
+        
         is_verified = u_info.get('is_verified', True)
 
-        # 4. إرسال القائمة الصحيحة
+        # 4. إرسال القائمة الصحيحة بناءً على الرتبة المحققة
         await update.message.reply_text(
             "🏠 تم الرجوع للقائمة الرئيسية.",
             reply_markup=get_main_kb(u_role, is_verified)
@@ -1389,13 +1348,26 @@ async def global_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
+        
     if state == 'WAIT_ADMIN_MESSAGE':
         if text == "❌ إلغاء المراسلة":
             context.user_data['state'] = None
-            role = user_info.get('role', 'rider')
-            verified_status = user_info.get('is_verified', False)
+            user_id = update.effective_user.id
+            
+            # 1. جلب البيانات من الكاش (بالمعرف الرقمي والنصي)
+            u_info = USER_CACHE.get(user_id) or USER_CACHE.get(str(user_id)) or {}
+            
+            # 2. تحديد الرتبة (وإذا لم توجد في الكاش، نجلبها من قاعدة البيانات)
+            role = u_info.get('role')
+            if not role:
+                # نستخدم await لأن دالة get_user_role معرّفة كـ async
+                role = await get_user_role(user_id) 
+            
+            verified_status = u_info.get('is_verified', False)
+
+            # 3. إرسال القائمة الصحيحة بناءً على الرتبة المحققة
             await update.message.reply_text(
-                "تم الإلغاء.", 
+                "تم الإلغاء والعودة للقائمة الرئيسية.", 
                 reply_markup=get_main_kb(role, verified_status)
             )
             return
@@ -1406,28 +1378,15 @@ async def global_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if conn:
         try:
             with conn.cursor() as cur:
-                # التحقق من وجود دردشة نشطة
                 cur.execute("SELECT partner_id FROM active_chats WHERE user_id = %s", (user_id,))
                 row = cur.fetchone()
-                
                 if row:
                     partner_id = row[0]
-                    try:
-                        # إرسال الرسالة للطرف الآخر
-                        await context.bot.send_message(chat_id=partner_id, text=text)
-                        return  # الخروج لمنع معالجة الرسالة كطلب مشوار
-                    except Exception as send_err:
-                        print(f"❌ فشل إرسال الرسالة للشريك {partner_id}: {send_err}")
-                        # اختياري: يمكنك هنا مسح الدردشة من الجدول إذا كان الحساب محظوراً
-        
-        except Exception as db_err:
-            print(f"❌ خطأ في استعلام الدردشة النشطة: {db_err}")
-            
+                    # هنا نمرر الرسالة للطرف الآخر
+                    await context.bot.send_message(chat_id=partner_id, text=text)
+                    return # نخرج فوراً (لا نريد قراءة الحي أثناء الدردشة)
         finally:
-            # ضروري جداً لإعادة الاتصال للمسبح (Pool)
             release_db_connection(conn)
-    else:
-        print("⚠️ تعذر الحصول على اتصال بقاعدة البيانات لـ global_handler")
 
     # --- 5. العزل الذكي للسائق ---
     
@@ -2032,6 +1991,7 @@ async def admin_panel_view(update, context):
 
 
 async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # السطر الأهم: استلام التحديث سواء كان رسالة جديدة أو تحديث للموقع الحي
     msg = update.message or update.edited_message
     if not msg or not msg.location:
         return
@@ -2041,109 +2001,84 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get('state')
     current_time = time.time()
 
-    # جلب بيانات المستخدم من الكاش
+    # جلب بيانات المستخدم
     user_data = USER_CACHE.get(user_id) or {}
-    user_role = user_data.get('role', UserRole.RIDER) # الافتراضي راكب
+    user_role = user_data.get('role', UserRole.RIDER)
 
-    # 1. تحديث الكاش المحلي فوراً
+    # --- 🟢 أولاً: فحص صلاحية السائق قبل أي معالجة 🟢 ---
+    if user_role == UserRole.DRIVER:
+        from datetime import datetime
+        import pytz
+        expiry = user_data.get('subscription_expiry')
+        
+        # إذا كان غير مشترك، نوقف المعالجة فوراً
+        if not expiry or expiry < datetime.now(pytz.utc):
+            # نرسل تنبيه مرة واحدة فقط كل 10 دقائق لكي لا نزعج السائق أثناء حركته
+            last_alert = context.user_data.get('last_sub_alert', 0)
+            if current_time - last_alert > 600: 
+                try: await context.bot.send_message(user_id, "⚠️ اشتراكك منتهي، لن يتم تحديث موقعك للركاب.")
+                except: pass
+                context.user_data['last_sub_alert'] = current_time
+            return
+
+    # --- 🔵 ثانياً: تحديث الموقع (يعمل الآن مع الموقع الحي) 🔵 ---
+    # تحديث الكاش المحلي
     if user_id in USER_CACHE:
         USER_CACHE[user_id]['lat'] = lat_val
         USER_CACHE[user_id]['lon'] = lon_val
     
-    # 2. تحديث قاعدة البيانات "بذكاء" (كل 30 ثانية فقط لتجنب الثقل)
+    # تحديث قاعدة البيانات (كل 60 ثانية)
     last_upd = LAST_DB_UPDATE.get(user_id, 0)
     if (current_time - last_upd) > 60:
         LAST_DB_UPDATE[user_id] = current_time
         asyncio.create_task(update_db_silent(user_id, lat_val, lon_val))
 
-    # 3. تمرير الموقع في المحادثات النشطة (فقط إذا كان هناك شات قائم)
+    # --- 🟡 ثالثاً: معالجة الحالات الخاصة 🟡 ---
+
+    # 1. إذا كان في شات نشط: مرر الموقع للطرف الآخر
     if context.user_data.get('in_active_chat'):
         partner_id = get_chat_partner(user_id)
         if partner_id:
             try:
+                # نستخدم copy_message لنقل إحداثيات الموقع الحي للطرف الآخر
                 await context.bot.copy_message(chat_id=partner_id, from_chat_id=user_id, message_id=msg.message_id)
-                return 
             except: pass
 
-    # 4. معالجة السائق (استخدام الـ Enum هنا)
-        # 4. معالجة السائق (إضافة فحص الاشتراك هنا) 🟢
-    if user_role == UserRole.DRIVER:
-        # فحص هل الاشتراك منتهٍ؟
-        expiry = user_data.get('subscription_expiry') # تأكد من وجوده في الكاش
-        from datetime import datetime
-        import pytz
-        
-        # إذا كان منتهياً أو غير موجود، لا نحدث الموقع ونخبره
-        if not expiry or expiry < datetime.now(pytz.utc):
-            if state != 'WAIT_LOCATION_FOR_ORDER': # لضمان عدم التداخل مع حالة الراكب
-                try: 
-                    await update.message.reply_text("⚠️ اشتراكك منتهي. يرجى التجديد لتتمكن من تحديث موقعك واستقبال الطلبات.")
-                    await update.message.delete()
-                except: pass
-            return 
-
-        if state != 'WAIT_LOCATION_FOR_ORDER':
-            if update.message: 
-                try: await update.message.delete()
-                except: pass
-            return
-
-    # 5. معالجة الراكب (عند طلب رحلة جديد)
+    # 2. إذا كان السائق يرسل موقع "عادي" (ليس حياً) وهو ليس في حالة طلب: نحذف الرسالة لتنظيف الشات
+    
+    # 3. معالجة الراكب عند طلب رحلة
     if state == 'WAIT_LOCATION_FOR_ORDER':
-        # تجميد الحالة فوراً لمنع تكرار الطلب مع كل تحرك للراكب
         context.user_data['state'] = 'SEARCHING'
+        processing_msg = await msg.reply_text("📡 جاري البحث عن كباتن مشتركين...")
         
-        processing_msg = await msg.reply_text("📡 جاري البحث عن كباتن قريباً منك...")
         sent_info = await broadcast_general_order(update, context)
         
         if sent_info:
+            # ... (كود الأزرار الخاص بك كما هو) ...
             keyboard = []
             for info in sent_info[:10]:
                 d_id = info['chat_id']
-                driver_data = USER_CACHE.get(d_id) or {}
-                driver_name = driver_data.get('name', 'كابتن متوفر')
-                
-                # جلب يوزر نيم السائق إذا وجد، أو استخدام رابط الـ ID المباشر
-                driver_username = driver_data.get('username')
-                if driver_username:
-                    driver_url = f"https://t.me/{driver_username}"
-                else:
-                    driver_url = f"tg://user?id={d_id}"
-                
-                # تعديل الزر لاستخدام url بدلاً من callback_data للتحويل المباشر
-                button = [InlineKeyboardButton(text=f"🚕 {driver_name}", url=driver_url)]
-                keyboard.append(button)
+                d_data = USER_CACHE.get(d_id) or {}
+                d_name = d_data.get('name', 'كابتن متوفر')
+                d_username = d_data.get('username')
+                d_url = f"https://t.me/{d_username}" if d_username else f"tg://user?id={d_id}"
+                keyboard.append([InlineKeyboardButton(text=f"🚕 {d_name}", url=d_url)])
 
-
-            final_text = (
-                f"✅ **تم تعميم طلبك بنجاح!**\n\n"
-                f"وصل طلبك إلى **{len(sent_info)}** كابتن متواجدين حالياً.\n"
-                f"⏳ يرجى الانتظار، سيتم التواصل معك هنا فور قبول أحدهم."
+            await context.bot.edit_message_text(
+                chat_id=user_id,
+                message_id=processing_msg.message_id,
+                text=f"✅ تم تعميم طلبك على {len(sent_info)} كابتن!",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
-
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=user_id,
-                    message_id=processing_msg.message_id,
-                    text=final_text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode="Markdown"
-                )
-            except:
-                await context.bot.send_message(chat_id=user_id, text=final_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-            
             asyncio.create_task(start_order_timer(context, sent_info, user_id, processing_msg.message_id))
         else:
-            await context.bot.send_message(chat_id=user_id, text="⚠️ نعتذر، لا يوجد كباتن متاحين حالياً.", reply_markup=get_main_kb(UserRole.RIDER, True))
-            try: await processing_msg.delete()
-            except: pass
+            await msg.reply_text("⚠️ لا يوجد كباتن متاحين حالياً.")
         
         context.user_data['state'] = None
 
-
 # ==================== دالة عرض الأحياء (محدثة) ====================
 
-async def show_districts_by_city(update: Update, context: ContextTypes.DEFAULT_TYPE, city_name: str = "جدة", is_edit=False):
+async def show_districts_by_city(update: Update, context: ContextTypes.DEFAULT_TYPE, city_name: str = "المدينة المنورة", is_edit=False):
     # تحديد المستخدم والكائن المستهدف
     if update.callback_query:
         user_id = update.callback_query.from_user.id
@@ -2183,9 +2118,8 @@ async def show_districts_by_city(update: Update, context: ContextTypes.DEFAULT_T
                 d_name = all_districts[i + j]
                 status = "✅ " if d_name in current_list else "❌ "
                 # نرسل toggle_dist_ لتمييزه عن الأزرار الأخرى
-                row.append(InlineKeyboardButton(f"{status}{d_name}", callback_data=f"tg_{city_name}_{d_name}"))
+                row.append(InlineKeyboardButton(f"{status}{d_name}", callback_data=f"toggle_dist_{d_name}"))
         keyboard.append(row)
-       
 
     keyboard.append([InlineKeyboardButton("💾 حفظ وإنهاء", callback_data="driver_home")])
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2236,39 +2170,15 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # 2. إغلاق مؤشر التحميل لبقية الأزرار
-       # 2. إغلاق مؤشر التحميل لبقية الأزرار
     try: 
         await query.answer()
     except: 
         pass
-
     if data == "districts_settings":
-        # عرض خيار اختيار المدينة للسائق
-        keyboard = [
-            [
-                InlineKeyboardButton("🕋 أحياء مكة", callback_data="city_مكة المكرمة"),
-                InlineKeyboardButton("🏙️ أحياء جدة", callback_data="city_جدة"),
-                InlineKeyboardButton("🏙️ أحياء نجران", callback_data="city_نجران")
-            ],
-            [InlineKeyboardButton("🔙 العودة للقائمة", callback_data="driver_main_menu")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        text = (
-            "🏘️ **إعدادات الأحياء**\n\n"
-            "لقد تم تحديث النظام لدعم مكة وجدة. "
-            "يرجى اختيار المدينة التي تعمل بها لعرض أحيائها:"
-        )
-        
-        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
-
-    # معالجة الضغط على اسم المدينة
-    if data.startswith("city_"):
-        selected_city = data.replace("city_", "")
-        # استدعاء دالة عرض الأحياء وتمرير اسم المدينة المختار (مكة أو جدة)
-        await show_districts_by_city(update, context, selected_city)
+        # عرض أحياء المدينة المنورة للسائق فوراً
+        from_city = "المدينة المنورة"
+        await show_districts_by_city(update, context, from_city)
         return
-
 
     # ===============================================================
     # [A] قسم الكابتن: إعدادات المناطق (تفعيل/إلغاء)
@@ -2292,21 +2202,19 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f"Error in delivery help: {e}")
 
-    elif data.startswith("tg_"): # غيرناها لتطابق الأزرار الجديدة
-        # تفكيك: tg_المدينة_الحي
-        parts = data.split("_", 2)
-        current_city = parts[1] # استخراج المدينة من الزر مباشرة (أضمن من context)
-        dist_name = parts[2]    # استخراج اسم الحي
+    elif data.startswith("toggle_dist_"):
+        # استخراج اسم الحي (الذي يأتي بعد toggle_dist_)
+        dist_name = data.split("_", 2)[2]
         
         # 1. تحديث الكاش المحلي فوراً (Fast UI)
         if user_id not in USER_CACHE:
-            USER_CACHE[user_id] = {'districts': ""}
+            USER_CACHE[user_id] = {'districts': ""} # تهيئة احتياطية
             
         user_info = USER_CACHE[user_id]
         current_str = user_info.get('districts', "") or ""
         current_list = [x.strip() for x in current_str.replace("،", ",").split(",") if x.strip()]
         
-        # منطق التبديل (Toggle Logic)
+        # منطق التبديل
         if dist_name in current_list:
             current_list.remove(dist_name)
             alert_msg = f"❌ تم تعطيل {dist_name}"
@@ -2318,16 +2226,15 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_districts_str = ",".join(current_list)
         USER_CACHE[user_id]['districts'] = new_districts_str
 
-        # 2. تحديث الواجهة (إعادة رسم الأزرار للمدينة التي جاءت من الزر)
-        await show_districts_by_city(update, context, city_name=current_city, is_edit=True)
+        # 2. تحديث الواجهة (إعادة رسم الأزرار فقط)
+        # نستدعي دالة العرض بوضع التعديل True
+        await show_districts_by_city(update, context, is_edit=True)
         
-        # إشعار سريع (Notification popup)
-        try:
-            await query.answer(alert_msg)
-        except:
-            pass
+        # إشعار سريع يختفي (Toast)
+        await query.answer(alert_msg)
 
-        # 3. تحديث قاعدة البيانات في الخلفية
+        # 3. تحديث قاعدة البيانات في الخلفية (Background Task)
+        # نستخدم thread لكي لا ينتظر البوت استجابة قاعدة البيانات
         import threading
         def save_db():
             conn = get_db_connection()
@@ -2339,10 +2246,11 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception as db_e:
                     print(f"DB Save Error: {db_e}")
                 finally:
-                    if conn: release_db_connection(conn)
+                    release_db_connection(conn)
         
         threading.Thread(target=save_db).start()
-        return
+
+
 
     elif data.startswith("admin_u_info_"):
         target_id = data.split("_")[3]
@@ -3344,33 +3252,8 @@ async def track_groups_from_messages(update: Update, context: ContextTypes.DEFAU
 
 
 async def districts_settings_view(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. بناء لوحة مفاتيح لاختيار المدينة لجدة ومكة
-    keyboard = [
-        [
-            InlineKeyboardButton("🏙️ جدة", callback_data="city_جدة"),
-            InlineKeyboardButton("🕋 مكة المكرمة", callback_data="city_مكة المكرمة"),
-            InlineKeyboardButton("🏙️ أحياء نجران", callback_data="city_نجران")
-
-        ],
-        [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_panel_view")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    text = (
-        "🏘️ **إعدادات الأحياء**\n\n"
-        "يرجى اختيار المدينة التي ترغب في إدارة أحيائها وتفعيلها لاستقبال الطلبات:"
-    )
-    
-    # 2. التحقق من طريقة الاستدعاء (Callback أو رسالة مباشرة)
-    if update.callback_query:
-        try:
-            await update.callback_query.answer() # إغلاق مؤشر التحميل في التلغرام
-            await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
-        except Exception as e:
-            # في حال كانت الرسالة قديمة جداً ولا يمكن تعديلها
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
-    else:
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+    # بدلاً من بناء قائمة المدن، ننتقل مباشرة لعرض أحياء المدينة المنورة
+    await show_districts_by_city(update, context, "المدينة المنورة")
 
 
 # --- أوامر الأدمن ---
@@ -3607,155 +3490,91 @@ async def group_order_scanner(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     user = update.effective_user
+    chat_id = update.effective_chat.id
     text = update.message.text
-    user_id = user.id
-
-    # --- 1. نظام منع التكرار (Cooldown) ---
-    now = datetime.now()
-    if user_id in user_cooldowns and (now - user_cooldowns[user_id]) < timedelta(seconds=2):
-        return
     
     def clean_text(t):
         return t.lower().replace("ة", "ه").replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").strip()
 
     msg_clean = clean_text(text)
+    # تقطيع الرسالة إلى كلمات للتأكد من أنها كلمة واحدة فقط
+    words = msg_clean.split()
 
-    if len(msg_clean) < 4:
+    # ------------------------------------------------------------------
+    # 🕒 تشغيل المؤقت التلقائي (يبقى كما هو)
+    # ------------------------------------------------------------------
+    if context.job_queue:
+        current_jobs = context.job_queue.get_jobs_by_name(str(chat_id))
+        if not current_jobs:
+            context.job_queue.run_repeating(
+                send_periodic_advertisement, 
+                interval=1800, 
+                first=10, 
+                chat_id=chat_id, 
+                name=str(chat_id)
+            )
+
+    # ------------------------------------------------------------------
+    # 1. حذف السبام فوراً (يبقى كما هو)
+    # ------------------------------------------------------------------
+    REAL_SPAM_KEYWORDS = [
+        "استثمار", "ربح سريع", "تداول", "عملات رقمية", "شغل من البيت",
+        "سيكليف", "سيكليفات", "سكليف", "سكليفات", "عذر طبي", "اعذار طبيه"
+    ]
+    if any(k in msg_clean for k in REAL_SPAM_KEYWORDS):
+        try: await update.message.delete()
+        except: pass
         return
 
-    # --- 2. الكلمات الدلالية للنية ---
-    KEYWORDS_INTENT = [
-    # الكلمات الأصلية التي وضعتها
-    "مشوار", "توصيل", "سواق", "سائق", "كابتن", "سياره", "سيارة", 
-    "ابي", "ابغى", "بغيت", "محتاج", "وصلني", "يوديني", 
-    "بكم", "موجود", "فاضي", "رايح", "حرك", "طريقي", "مين"
-]
-
-    has_intent = any(k in msg_clean for k in KEYWORDS_INTENT)
-
-    # --- 3. البحث الذكي عن الحي والمدينة ---
-    found_dist = None
-    found_city = None
-
-    for city, districts in CITIES_DISTRICTS.items():
-        for dist in districts:
-            cleaned_dist = clean_text(dist)
-            if f" {cleaned_dist} " in f" {msg_clean} ":
-                found_dist = dist
-                found_city = city
-                break
-        if found_dist: break
-
-    # --- 4. معالجة الطلب في حال وجود حي ونية (بدون شرط اشتراك) ---
-    if found_dist and has_intent:
-        user_cooldowns[user_id] = now
-        await sync_all_users() # تحديث الكاش
-        
-        matched_drivers = []
-
-        # فلترة السائقين: (فقط غير محظور + نفس الحي)
-        for d in CACHED_DRIVERS:
-            # تم إزالة فحص التاريخ (expiry) هنا تماماً
-            
-            if (d.get('role') == 'driver' and 
-                not d.get('is_blocked', False) and 
-                d.get('districts') and 
-                clean_text(found_dist) in clean_text(d['districts'])):
-                matched_drivers.append(d)
-
-        if matched_drivers:
-            drivers_to_show = matched_drivers[:10]
-            kb = []
-            
-            for d in drivers_to_show:
-                # جلب المعرف من قاعدة البيانات
-                d_id = d.get('user_id')
-                d_name = d.get('name', 'كابتن متاح')
-                
-                # استخدام الرابط الذي طلبته بناءً على تجرتبك
-                direct_url = f"tg://openmessage?user_id={d_id}"
-                
-                kb.append([InlineKeyboardButton(
-                    text=f"🚖 مراسلة {d_name}", 
-                    url=direct_url
-                )])
-
-            try:
-                # محاولة إرسال الرسالة للأعضاء في القروب
-                await update.message.reply_text(
-                    f"✅ أبشر يا {user.first_name}، وجدنا كباتن متاحين في حي **{found_dist}**:\n"
-                    "اضغط على اسم الكابتن لمراسلته فوراً:",
-                    reply_markup=InlineKeyboardMarkup(kb),
-                    parse_mode="Markdown"
-                )
-            except telegram.error.BadRequest as e:
-                # معالجة استثنائية في حال رفض تيليجرام الرابط لأي سبب
-                if "Button_user_privacy_restricted" in str(e):
-                    print(f"⚠️ خصوصية المستخدم {d_id} منعت إنشاء الزر")
-                    await update.message.reply_text(
-                        f"📍 وجدنا كباتن في حي **{found_dist}**، ولكن يرجى منهم التواصل معك مباشرة بسبب إعدادات الخصوصية لديهم."
-                    )
-                else:
-                    # أي خطأ آخر يتم تسجيله دون إيقاف البوت
-                    print(f"🚨 خطأ تقني: {e}")
-
-
-            # 2. إرسال إشعارات خاصة للكباتن
-            client_url = f"https://t.me/{user.username}" if user.username else f"tg://user?id={user.id}"
-            
-            driver_msg = (
-                f"🔔 **تنبيه طلب جديد!**\n\n"
-                f"📍 يوجد عميل يبحث عن مشوار في حي: **{found_dist}**\n"
-                f"👤 العميل: {user.full_name}\n"
-                f"💬 نص الطلب: {text}\n\n"
-                f"🚀 يمكنك مراسلة العميل الآن عبر الزر أدناه:"
-            )
-            
-            driver_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("💬 مراسلة العميل", url=client_url)]
-            ])
-            
-            for d in drivers_to_show:
-                try:
-                    await context.bot.send_message(
-                        chat_id=d['user_id'], 
-                        text=driver_msg, 
-                        reply_markup=driver_kb,
-                        parse_mode="Markdown"
-                    )
-                except:
-                    pass # في حال حظر السائق للبوت
-
-        else:
-            # في حال لم يتم العثور على كباتن في هذا الحي
-            await update.message.reply_text(
-                f"📍 حي **{found_dist}** ({found_city}):\nلا يوجد كباتن متوفرين في هذا الحي حالياً، اطلب عبر الخريطة:",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(f"🌍 طلب أقرب كابتن (GPS)", url=f"https://t.me/{context.bot.username}?start=order_general")]]),
-                parse_mode="Markdown"
-            )
+    # ------------------------------------------------------------------
+    # 2. إشعار الآدمن بالطلبات الشهرية (يبقى كما هو)
+    # ------------------------------------------------------------------
+    MONTHLY_KEYWORDS = ["شهري", "عقد", "مشوار شهري", "نقل طالبات", "نقل موظفات"]
+    if any(k in msg_clean for k in MONTHLY_KEYWORDS):
+        admin_text = (
+            "🚨 **طلب تعاقد شهري (المدينة المنورة):**\n\n"
+            f"👤 العميل: {user.first_name}\n"
+            f"📝 النص: {text}\n"
+            f"🔗 [تواصل مع العميل](tg://user?id={user.id})"
+        )
+        for admin_id in ADMIN_IDS:
+            try: await context.bot.send_message(chat_id=admin_id, text=admin_text, parse_mode="Markdown")
+            except: pass
         return
 
-    # الرد التلقائي عند كتابة كلمة "مشوار" فقط
-    elif msg_clean == "مشوار":
-        now = datetime.now()
-        if user_id in user_cooldowns and (now - user_cooldowns[user_id]) < timedelta(seconds=60):
-            return
+    # ------------------------------------------------------------------
+    # 🚀 منطق الرد الجديد: الكلمات الثلاث فقط ومفردة
+    # ------------------------------------------------------------------
+    
+    # الكلمات المسموح بها
+    TARGET_WORDS = ["مشوار", "تكسي", "تاكسي"]
+    
+    should_reply = False
 
-        user_cooldowns[user_id] = now
-        
+    # الشرط: أن تتكون الرسالة من كلمة واحدة فقط، وأن تكون ضمن القائمة
+    if len(words) == 1 and words[0] in TARGET_WORDS:
+        should_reply = True
+
+    # ميزة إضافية: كلمة "رن" للمسؤول للاختبار
+    if msg_clean == "رن" and user.id in ADMIN_IDS:
+        should_reply = True
+
+    # ------------------------------------------------------------------
+    # ✅ إرسال الرد
+    # ------------------------------------------------------------------
+    if should_reply:
         welcome_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📍 اطلب مشوار عبر GPS 📍", url=f"https://t.me/{context.bot.username}?start=order_general")],
+            [InlineKeyboardButton("📍 اطلب أقرب كابتن بالمدينة (GPS) 📍", url=f"https://t.me/{context.bot.username}?start=order_general")],
             [InlineKeyboardButton("🚕 تسجيل كابتن جديد", url=f"https://t.me/{context.bot.username}?start=driver_reg")]
         ])
         
         await update.message.reply_text(
-            f"يا هلا بك يا {user.first_name}.. أبشر بسعدك 🚕\n\n"
-            "إذا كنت تبحث عن توصيلة، يمكنك الطلب مباشرة عبر الخريطة (GPS) أو التسجيل معنا ككابتن عبر الأزرار التالية:",
+            f"✨ **أبشر يا {user.first_name}، طلبك في المدينة المنورة مجاب!** ✨\n\n"
+            "للحصول على كابتن بسرعة وبدقة:\n"
+            "✅ **اضغط على زر (طلب عبر GPS) بالأسفل** وسيتواصل معك الكباتن فوراً.", 
             reply_markup=welcome_kb,
             parse_mode="Markdown"
         )
-        return
-
 
 async def handle_chat_proxy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. حماية: نتجاهل أي تحديث ليس رسالة (تجاهل ضغطات الأزرار CallbackQueries)
@@ -3892,7 +3711,7 @@ async def contact_admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     admin_text = (
         "📝 **أرسل رسالتك أو شكواك الآن في رسالة واحدة:**\n\n"
         "أو يمكنك التحدث مباشرة عبر الرابط التالي:\n"
-        "👤 @Servecestu"
+        "👤 @x3FreTx"
     )
     
     await update.message.reply_text(
@@ -4146,7 +3965,7 @@ async def group_districts_handler(update: Update, context: ContextTypes.DEFAULT_
         keyboard.append(row)
 
     await update.message.reply_text(
-        "📍 **أحياء جدة و مكة المتاحة:**\nإضغط على الحي لعرض الكباتن المتوفرين والطلب مباشرة عبر الخاص 👇",
+        "📍 **أحياء المدينة المنورة المتاحة:**\nإضغط على الحي لعرض الكباتن المتوفرين والطلب مباشرة عبر الخاص 👇",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -4300,15 +4119,12 @@ async def admin_show_user_details(update, context, target_id):
     ]
 
     await query.edit_message_text(res_txt, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
-
-
-# 1. إعداد البوت بـ Connection Pool عالي للأداء السريع
-
-
-async def broadcast_order_to_drivers(district, content, cust_name, username, msg_link):
+    
+    
+# أضفنا cust_id كبرامتر جديد في الدالة
+async def broadcast_order_to_drivers(district, content, cust_name, cust_id, username, msg_link):
     """
-    تقوم ببث الطلب لجميع السائقين المسجلين (اعتبار الكل مشتركين)
-    مع فلترة الأحياء فقط.
+    تقوم ببث الطلب للسائقين مع زر تواصل مباشر باستخدام المعرف الرقمي (User ID).
     """
     target_district = district.strip() if district else "عام"
     
@@ -4321,7 +4137,7 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
     
     city_suffix = f" في {detected_city}" if detected_city else ""
     
-    print(f"📡 [بدء البث المفتوح] الحي: {target_district} | العميل: {cust_name}")
+    print(f"📡 [بدء البث] الحي: {target_district} | العميل: {cust_name} | معرف العميل: {cust_id}")
     
     conn = get_db_connection()
     if not conn: 
@@ -4329,9 +4145,8 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
     
     try:
         with conn.cursor() as cur:
-            # جلب جميع السائقين غير المحظورين فقط
             cur.execute("""
-                SELECT user_id, districts 
+                SELECT user_id, subscription_expiry, districts 
                 FROM users 
                 WHERE is_blocked = FALSE AND LOWER(role) = 'driver'
             """)
@@ -4340,64 +4155,120 @@ async def broadcast_order_to_drivers(district, content, cust_name, username, msg
         if not drivers:
             return
 
-        all_send_tasks = []
+        now = datetime.now(timezone.utc)
+        active_tasks = []
+        inactive_tasks = []
 
-        # --- بناء لوحة أزرار التواصل الموحدة ---
+        # --- 1. بناء لوحة أزرار التواصل للمشتركين (استخدام الرابط المطلوب) ---
         driver_keyboard = []
-        if username and username != "None" and username.startswith("http"):
-            driver_keyboard.append([InlineKeyboardButton(text=f"👤 مراسلة العميل (خاص)", url=username)])
         
-        if msg_link and msg_link.startswith("http"):
-            driver_keyboard.append([InlineKeyboardButton(text="🔗 اذهب لمصدر الطلب (القروب)", url=msg_link)])
+        # إنشاء زر التواصل باستخدام المعرف الرقمي الممرر من كود القنص
+        if cust_id:
+            # الرابط الذي يعمل لفتح الخاص مباشرة
+            direct_url = f"tg://openmessage?user_id={cust_id}"
+            driver_keyboard.append([
+                InlineKeyboardButton(text="👤 مراسلة العميل (خاص مباشر)", url=direct_url)
+            ])
+        
+        # تم إزالة زر "مصدر الطلب" كما طلبت لتركيز التواصل في الخاص فقط
 
-        reply_markup = InlineKeyboardMarkup(driver_keyboard) if driver_keyboard else None
+        reply_markup_active = InlineKeyboardMarkup(driver_keyboard) if driver_keyboard else None
 
-        # --- حلقة التوزيع والفلترة ---
-        for user_id, driver_districts in drivers:
+        # --- 2. حلقة التوزيع والفلترة ---
+        for user_id, expiry, driver_districts in drivers:
+            is_active = False
+            if expiry:
+                if expiry.tzinfo is None: expiry = expiry.replace(tzinfo=timezone.utc)
+                is_active = (expiry > now)
             
             driver_areas_list = [d.strip() for d in driver_districts.split(',')] if driver_districts else []
 
-            # منطق فلترة الأحياء (يستلم إذا كان الحي مطابقاً أو إذا اختار السائق "عام")
             should_receive = False
-            if "عام" in driver_areas_list or target_district in driver_areas_list:
-                should_receive = True
-            elif target_district == "عام":
-                # إذا كان الطلب عاماً، يصل للجميع بغض النظر عن أحيائهم
-                should_receive = False
+            if is_active:
+                if "عام" in driver_areas_list or target_district in driver_areas_list:
+                    should_receive = True
+                elif target_district == "عام":
+                    should_receive = False 
+            else:
+                should_receive = True # لغير المشتركين كدعاية وتنبيه
 
             if not should_receive:
                 continue
 
-            # صياغة الرسالة
+            # صياغة الرسالة بتنسيق HTML نظيف
             safe_content = html.escape(content)
             safe_cust_name = html.escape(cust_name)
             safe_district_display = html.escape(target_district)
 
-            msg_text = (
-                f"🎯 <b>طلب مشوار جديد{city_suffix}</b>\n"
-                f"━━━━━━━━━━━━━━\n"
-                f"📍 <b>الحي:</b> {safe_district_display}\n"
-                f"👤 <b>العميل:</b> {safe_cust_name}\n"
-                f"📝 <b>التفاصيل:</b>\n{safe_content}\n"
-                f"━━━━━━━━━━━━━━\n"
-                f"✅ <i>اضغط على الأزرار بالأسفل للتواصل</i>"
-            )
+            if is_active:
+                # --- تنسيق المشتركين ---
+                msg_text = (
+                    f"🎯 <b>طلب مشوار جديد{city_suffix}</b>\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"📍 <b>الحي:</b> {safe_district_display}\n"
+                    f"👤 <b>العميل:</b> {safe_cust_name}\n"
+                    f"📝 <b>التفاصيل:</b>\n{safe_content}\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"✅ <i>اضغط على الزر بالأسفل لمراسلته فوراً</i>"
+                )
+                active_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=reply_markup_active))
             
-            # إضافة المهمة للقائمة الموحدة
-            all_send_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=reply_markup))
+            else:
+                # --- تنسيق غير المشتركين ---
+                sub_link = "https://t.me/x3FreTx"
+                msg_text = (
+                    f"🎯 <b>طلب مشوار جديد{city_suffix}</b>\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"📍 <b>الحي:</b> {safe_district_display}\n"
+                    f"📝 <b>التفاصيل:</b>\n{safe_content}\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"⚠️ <b>التواصل متاح للمشتركين فقط</b>"
+                )
+                keyboard_sub = InlineKeyboardMarkup([[InlineKeyboardButton(text="💳 اشتراك وتفعيل المراسلة", url=sub_link)]])
+                inactive_tasks.append(send_with_retry(int(user_id), msg_text, reply_markup=keyboard_sub))
 
-        # --- تنفيذ البث على دفعات لضمان عدم توقف البوت (Batching) ---
-        if all_send_tasks:
-            print(f"📤 جاري الإرسال لـ {len(all_send_tasks)} سائق...")
-            for i in range(0, len(all_send_tasks), 20):
-                await asyncio.gather(*all_send_tasks[i:i+20])
-                await asyncio.sleep(0.5) # حماية من Flood Wait وتجنب Pool Timeout
+        # تنفيذ البث
+        if active_tasks:
+            for i in range(0, len(active_tasks), 20):
+                await asyncio.gather(*active_tasks[i:i+20])
+                await asyncio.sleep(0.5)
+
+        if inactive_tasks:
+            for i in range(0, len(inactive_tasks), 20):
+                await asyncio.gather(*inactive_tasks[i:i+20])
+                await asyncio.sleep(0.5)
 
     except Exception as e:
-        print(f"❌ خطأ فني أثناء البث المفتوح: {e}")
+        print(f"❌ خطأ فني أثناء البث: {e}")
     finally:
         release_db_connection(conn)
 
+async def send_with_retry(user_id, text, reply_markup=None):
+    """
+    إرسال الرسالة مع دعم الأزرار (reply_markup) والتنظيف الاحتياطي
+    """
+    try:
+        await distribution_bot.send_message(
+            chat_id=user_id,
+            text=text,
+            reply_markup=reply_markup, # التعديل هنا: مررنا المتغير بدلاً من None
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        print(f"⚠️ فشل التنسيق لـ {user_id}: {e}")
+        try:
+            # تنظيف يدوي للوسوم في حال انكسار الـ HTML
+            import re
+            clean_text = re.sub('<[^<]+?>', '', text)
+            await distribution_bot.send_message(
+                chat_id=user_id,
+                text=f"⚠️ (مشكلة في التنسيق)\n\n{clean_text}",
+                reply_markup=reply_markup, # نرسل الأزرار حتى في المحاولة الاحتياطية
+                parse_mode=None 
+            )
+        except Exception as e2:
+            print(f"❌ فشل الإرسال النهائي: {e2}")
 
 async def send_with_retry(user_id, text, reply_markup=None):
     """
@@ -4438,7 +4309,7 @@ async def notify_channel(district, content, cust_id):
 
         buttons = [
             [InlineKeyboardButton("💬 مراسلة العميل (للمشتركين)", url=gate_contact)],
-            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/Servecestu")]
+            [InlineKeyboardButton("💳 للاشتراك وتفعيل الحساب", url="https://t.me/x3FreTx")]
         ]
         keyboard = InlineKeyboardMarkup(buttons)
 
@@ -4460,29 +4331,45 @@ async def notify_channel(district, content, cust_id):
         print(f"❌ خطأ إرسال للقناة: {e}")
 
 
+
 async def handle_radar_signal(update, context):
     try:
         text = update.message.text
         if not text or "#ORDER_DATA#" not in text:
             return
 
-        # استخدام Regex لسحب القيم بدقة (يدعم الأسطر المتعددة في CONTENT)
+        # وظيفة استخراج القيم باستخدام Regex
         def extract(tag, source):
-            # يبحث عن التاغ ويأخذ كل ما بعده حتى بداية التاغ التالي أو نهاية النص
+            # البحث عن التاغ واستخراج ما بعده حتى التاغ التالي أو نهاية النص
             pattern = rf"{tag}:(.*?)(?=\n[A-Z_]+:|$)"
             match = re.search(pattern, source, re.DOTALL)
             return match.group(1).strip() if match else None
 
+        # 1. استخراج البيانات من الطرد (بما فيها CUST_ID الجديد)
         district  = extract("DISTRICT", text) or "عام"
         cust_name = extract("CUST_NAME", text) or "عميل"
+        cust_id   = extract("CUST_ID", text)    # استخراج المعرف الرقمي
         content   = extract("CONTENT", text) or "لا توجد تفاصيل"
         username  = extract("USERNAME", text) or "None"
         msg_link  = extract("MSG_LINK", text) or ""
 
-        print(f"📡 إشارة رادار: حي {district} | العميل {cust_name}")
+        # التأكد من وجود ID العميل قبل الاستمرار
+        if not cust_id:
+            print(f"⚠️ تحذير: تم استلام طلب بدون CUST_ID من {cust_name}")
+            # يمكنك وضع قيمة افتراضية أو البحث عنه في مكان آخر إذا لزم الأمر
 
-        # نرسل الروابط لدالة البث
-        asyncio.create_task(broadcast_order_to_drivers(district, content, cust_name, username, msg_link))
+        print(f"📡 إشارة رادار: حي {district} | العميل {cust_name} | معرف {cust_id}")
+
+        # 2. استدعاء دالة البث مع تمرير كافة المتغيرات الـ 6 المطلوبة
+        # تأكد من ترتيب المتغيرات كما هو في تعريف الدالة
+        asyncio.create_task(broadcast_order_to_drivers(
+            district=district, 
+            content=content, 
+            cust_name=cust_name, 
+            cust_id=cust_id,    # هذا هو المتغير الناقص الذي سبب المشكلة
+            username=username, 
+            msg_link=msg_link
+        ))
 
     except Exception as e:
         print(f"❌ خطأ في معالجة إشارة الرادار: {e}")
@@ -4512,6 +4399,9 @@ def main():
     application.add_handler(MessageHandler(filters.Regex("^لوحة التحكم$") & filters.User(ADMIN_IDS), admin_panel_view), group=0)
     application.add_handler(CommandHandler("send_drivers", broadcast_to_drivers), group=0)
     application.add_handler(CommandHandler("send_riders", broadcast_to_riders), group=0)
+    # أضف هذا السطر داخل دالة main
+    application.add_handler(MessageHandler(filters.User(user_id=RADAR_ACCOUNT_ID) & filters.Regex("#ORDER_DATA#"), handle_radar_signal), group=0)
+
     
 # أضف هذا السطر في دالة main
     application.add_handler(CommandHandler("picsend", admin_pic_send))
@@ -4589,10 +4479,12 @@ def main():
     
     
     
+    # استخدام عامل "أو" (|) بدلاً من "و" (&) لضمان استقبال النوعين
     application.add_handler(MessageHandler(
-    filters.LOCATION & filters.UpdateType.EDITED_MESSAGE, 
+    filters.LOCATION & (filters.UpdateType.MESSAGE | filters.UpdateType.EDITED_MESSAGE), 
     location_handler
 ), group=1)
+
 
     # ---------------------------------------------------------
     # المجموعة 2: إدارة الحالات (التسجيل والقوائم - Global)
