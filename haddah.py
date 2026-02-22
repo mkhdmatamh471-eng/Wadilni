@@ -2132,127 +2132,78 @@ async def order_ride_options(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def broadcast_general_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     r_lat = update.message.location.latitude if update.message and update.message.location else context.user_data.get('lat')
-
     r_lon = update.message.location.longitude if update.message and update.message.location else context.user_data.get('lon')
-
-
 
     if r_lat is None or r_lon is None: return []
 
-
-
     map_link = f"https://www.google.com/maps?q={r_lat},{r_lon}"
-
     price = context.user_data.get('order_price', 0)
-
     details = context.user_data.get('search_district', "موقع GPS")
-
     rider_id = update.effective_user.id
 
-
-
     sent_messages_info = [] 
-
     await sync_all_users()
 
-# 🟢 أضف هذا السطر هنا لتفادي الخطأ
+    # 🟢 جلب الوقت الحالي لتفادي الخطأ
+    
+    # 1. إنشاء قاموس لجمع المستهدفين (المعرف: المسافة) لمنع التكرار
+    targets_to_send = {}
 
-    from datetime import datetime
-
-    import pytz
-
-    now = datetime.now(pytz.utc) 
-
-
-
+    # --- فلترة السائقين ---
     for d in CACHED_DRIVERS:
-
+        user_id = d['user_id']
+        
         # 1. تخطي الراكب نفسه أو من ليس لديه إحداثيات
-
-        if d['user_id'] == rider_id or d.get('lat') is None: 
-
+        if user_id == rider_id or d.get('lat') is None: 
             continue
-
             
-
-        # 2. التعديل الجديد: منع السائقين غير الموثقين من استلام الطلبات
-
-        # نفترض أن قيمة التوثيق مخزنة في 'is_verified' داخل الكاش
-
-
-
         # 2. منع السائقين غير الموثقين
-
         if not d.get('is_verified', False):
-
             continue
 
-
-
-        # --- 🟢 التعديل الجديد: منع السائقين غير المشتركين 🟢 ---
-
-        expiry = d.get('subscription_expiry')
-
-        # إذا لم يوجد تاريخ أو كان التاريخ قد انتهى، نتخطى السائق فوراً
-
-        if not expiry or expiry < now:
-
-            continue
-
-        # --- 🔴 نهاية التعديل 🔴 ---
-
-
-
+        # 3. منع السائقين غير المشتركين
+        
         dist = get_distance(r_lat, r_lon, d['lat'], d['lon'])
 
-
-
-        # 3. إرسال الطلب فقط لمن هم في نطاق 15 كم
-
+        # 4. إضافة السائق إذا كان في نطاق 10 كم
         if dist <= 10.0: 
+            targets_to_send[user_id] = f"{dist:.1f}"
 
-            kb = InlineKeyboardMarkup([
-
-                [InlineKeyboardButton(f"✅ قبول ({price} ريال)", callback_data=f"accept_gen_{rider_id}_{price}")],
-
-                [InlineKeyboardButton("💵 اقتراح سعر آخر", callback_data=f"bid_req_{rider_id}")] 
-
-            ])
-
-
-
-            try:
-
-                msg = await context.bot.send_message(
-
-                    chat_id=d['user_id'],
-
-                    text=(f"🚨 **طلب جديد قريب منك!**\n\n"
-
-                          f"📍 المسافة: {dist:.1f} كم\n"
-
-                          f"📝 الوجهة: {details}\n"
-
-                          f"💰 العرض: {price} ريال\n\n"
-
-                          f"🗺 [موقع الراكب على الخريطة]({map_link})"),
-
-                    reply_markup=kb,
-
-                    parse_mode=ParseMode.MARKDOWN
-
-                )
-
-                sent_messages_info.append({'chat_id': d['user_id'], 'message_id': msg.message_id})
-
-            except: 
-
-                continue
-
+    # --- إضافة الإدارة (ADMIN_IDS) ---
+    # نفترض أن ADMIN_IDS معرفة في أعلى الملف، مثل: ADMIN_IDS = [1234, 5678]
+    for admin_id in ADMIN_IDS:
+        # إذا كان الأدمن ليس موجوداً بالفعل في القائمة (لم يتم إضافته كسائق قريب)
+        if admin_id not in targets_to_send:
+            # إذا كان الأدمن هو الراكب نفسه، نتخطاه (اختياري)
+            if admin_id == rider_id: continue 
             
+            targets_to_send[admin_id] = "نسخة إدارة"
 
+    # --- تجهيز الأزرار والإرسال للجميع ---
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"✅ قبول ({price} ريال)", callback_data=f"accept_gen_{rider_id}_{price}")],
+        [InlineKeyboardButton("💵 اقتراح سعر آخر", callback_data=f"bid_req_{rider_id}")] 
+    ])
+
+    # المرور على كل المستهدفين (سائقين مطابقين + إدارة) وإرسال الرسالة
+    for target_id, dist_text in targets_to_send.items():
+        try:
+            msg = await context.bot.send_message(
+                chat_id=target_id,
+                text=(f"🚨 **طلب جديد قريب منك!**\n\n"
+                      f"📍 المسافة: {dist_text} كم\n"
+                      f"📝 الوجهة: {details}\n"
+                      f"💰 العرض: {price} ريال\n\n"
+                      f"🗺 [موقع الراكب على الخريطة]({map_link})"),
+                reply_markup=kb,
+                parse_mode=ParseMode.MARKDOWN
+            )
+            sent_messages_info.append({'chat_id': target_id, 'message_id': msg.message_id})
+        except Exception as e: 
+            print(f"⚠️ تعذر الإرسال للمعرف {target_id}: {e}")
+            continue
+            
     return sent_messages_info
 
 
