@@ -115,7 +115,7 @@ app.get('/auth', (req, res) => {
 app.use(express.urlencoded({ extended: true })); // لقراءة بيانات الفورم
 
 app.post('/request-code', async (req, res) => {
-    const phone = req.body.phone.replace(/\D/g, ''); // تنظيف الرقم
+    const phone = req.body.phone.replace(/\D/g, ''); 
     
     if (!phone || phone.length < 10) {
         return res.send("رقم الهاتف غير صحيح. <a href='/auth'>عودة</a>");
@@ -125,18 +125,29 @@ app.post('/request-code', async (req, res) => {
     isConnecting = true;
     pairingCode = "";
 
-    console.log(`⏳ جاري طلب كود للرقم: ${targetPhone}`);
+    console.log(`⏳ جاري محاولة استخراج كود للرقم: ${targetPhone}`);
     
     try {
-        // ننتظر قليلاً للتأكد من جاهزية المحرك
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // 1. زيادة وقت الانتظار لضمان تحميل الصفحة تماماً (مهم جداً لسيرفرات Render)
+        await new Promise(resolve => setTimeout(resolve, 10000)); 
+
+        // 2. محاولة طلب الكود
         pairingCode = await client.requestPairingCode(targetPhone);
-        console.log(`✅ الكود المولّد: ${pairingCode}`);
+        console.log(`✅ تم الحصول على الكود: ${pairingCode}`);
+        
     } catch (err) {
         console.error("❌ فشل طلب الكود:", err.message);
+        // محاولة ثانية سريعة في حال كان الخطأ عارضاً
+        try {
+            console.log("🔄 محاولة ثانية...");
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            pairingCode = await client.requestPairingCode(targetPhone);
+        } catch (retryErr) {
+            console.error("❌ فشل المحاولة الثانية أيضاً");
+        }
     } finally {
         isConnecting = false;
-        res.redirect('/auth'); // العودة لصفحة العرض
+        res.redirect('/auth');
     }
 });
 
