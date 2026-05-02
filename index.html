@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
@@ -249,6 +251,18 @@ table.pt tbody tr:hover td{background:#f7f9fc}
     transition: all 0.2s ease;
     user-select: none; /* منع تحديد النص عند النقر السريع */
 }
+// 1. أضف هذا الجزء داخل وسم <style> لإخفاء الرابط عند الطباعة
+/* @media print {
+  @page { margin: 0.5cm; }
+  #loginScreen, .app-header, .tab-nav, .rpt-tabs, .export-bar, .abt, .hdr-btns, .no-print {
+    display: none !important;
+  }
+  body { background: #fff; margin: 0; }
+  .tbl-wrap { box-shadow: none; border: 1px solid #eee; }
+}
+*/
+
+// 2. دالة الطباعة المحدثة (ضعها داخل وسم <script>)
 
 </style>
 </head>
@@ -611,19 +625,45 @@ function openPassModal(){
 function closePassModal(e){
   if(!e || e.target === el('passModal')) el('passModal').classList.remove('open');
 }
-function changePassword(){
+function changePassword() {
   const old = el('oldPass').value;
   const nw  = el('newPass').value.trim();
   const cf  = el('confPass').value.trim();
   const err = s => { el('passErr').textContent = s; el('passErr').style.display = 'block'; };
-  if(old !== getCreds().pass){ err('كلمة السر الحالية غير صحيحة'); return; }
-  if(nw.length < 4)          { err('كلمة السر الجديدة يجب أن تكون 4 أحرف على الأقل'); return; }
-  if(nw !== cf)              { err('كلمة السر الجديدة وتأكيدها غير متطابقتين'); return; }
-  saveCreds({pass: nw});
+
+  // استرجاع الهاش المخزن حالياً
+  const currentCreds = getCreds();
+  const storedHash = currentCreds.passHash || hashPass(DEFAULT_PASS);
+
+  // 1. التحقق من كلمة السر القديمة باستخدام التشفير
+  if (hashPass(old) !== storedHash) { 
+    err('كلمة السر الحالية غير صحيحة'); 
+    return; 
+  }
+  
+  // 2. التحقق من طول وقوة كلمة السر الجديدة
+  if (nw.length < 4) { 
+    err('كلمة السر الجديدة يجب أن تكون 4 أحرف على الأقل'); 
+    return; 
+  }
+  
+  // 3. تطابق كلمة السر الجديدة مع التأكيد
+  if (nw !== cf) { 
+    err('كلمة السر الجديدة وتأكيدها غير متطابقتين'); 
+    return; 
+  }
+
+  // 4. التخزين بصيغة الـ Hash الموحدة لضمان عمل doLogin بشكل صحيح
+  saveCreds({
+    passHash: hashPass(nw)
+  });
+
   el('passModal').classList.remove('open');
-  toast('تم تغيير كلمة السر بنجاح', 'ok');
+  toast('تم تحديث كلمة المرور بنجاح، سيتم تسجيل خروجك للأمان', 'ok');
+  
+  // يفضل تسجيل الخروج لإجبار المستخدم على الدخول بكلمة السر الجديدة
+  setTimeout(() => doLogout(), 1500);
 }
-document.addEventListener('keydown', e => { if(e.key==='Escape') el('passModal').classList.remove('open'); });
 
 // ══════════════════════════════════════════════
 //  NAVIGATION
@@ -838,12 +878,15 @@ async function renderAll(){
         (r.phone||'').includes(q) ||
         (r.diagnosis||'').toLowerCase().includes(q))
     : all;
+    
   const sorted = rows.sort((a,b) => new Date(b.date)-new Date(a.date));
   const tb = el('allBody');
+  
   if(!sorted.length){
     tb.innerHTML = `<tr><td colspan="8" class="empty">لا توجد سجلات مطابقة</td></tr>`;
     return;
   }
+
   tb.innerHTML = sorted.map((r,i) => `
     <tr>
       <td>${i+1}</td>
@@ -855,11 +898,16 @@ async function renderAll(){
       <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
           title="${esc(r.diagnosis||'')}">${esc(r.diagnosis||'—')}</td>
       <td>
-        <button class="abt edit" onclick="editRec(${r.id})">✏️</button>
-        <button class="abt" onclick="delRec(${r.id})">🗑️</button>
+        <div style="display: flex; gap: 4px;">
+          <button class="abt edit" onclick="editRec(${r.id})" title="تعديل">✏️</button>
+<button class="print-btn-close" style="background:#27ae60; margin-left:10px" onclick="downloadAsImage()">📸 حفظ كصورة للطباعة</button>
+
+          <button class="abt" onclick="delRec(${r.id})" title="حذف">🗑️</button>
+        </div>
       </td>
     </tr>`).join('');
 }
+
 
 // ══════════════════════════════════════════════
 //  REPORTS
@@ -1332,6 +1380,114 @@ document.addEventListener('click', (e) => {
     if (e.target.id !== 'diagnosis') el('diagSuggestions').style.display = 'none';
 });
 
+
+
+async function printPatientStatement(id) {
+    const r = await dbGet(id);
+    if (!r) return;
+
+    // 1. إزالة أي نافذة معاينة قديمة لتجنب تكرار الـ IDs
+    const oldArea = document.getElementById('printArea');
+    if (oldArea) oldArea.remove();
+
+    // 2. بناء المحتوى (تأكد من إضافة المعرفات ID المطلوبة)
+    const printDiv = document.createElement('div');
+    printDiv.id = 'printArea';
+    Object.assign(printDiv.style, {
+        position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
+        backgroundColor: 'white', zIndex: '999999', direction: 'rtl',
+        padding: '20px', boxSizing: 'border-box', overflowY: 'auto'
+    });
+
+    printDiv.innerHTML = `
+        <div class="no-print" id="printControls" style="background:#f0f4f8; padding:10px; margin-bottom:20px; display:flex; justify-content:space-between;">
+            <b style="color:#1a3a5c">معاينة كشف الحساب</b>
+            <div>
+                <button onclick="downloadAsImage()" style="background:#27ae60; color:white; border:none; padding:8px 15px; border-radius:5px;">📸 حفظ كصورة</button>
+                <button onclick="document.getElementById('printArea').remove()" style="background:#e74c3c; color:white; border:none; padding:8px 15px; border-radius:5px; margin-right:5px;">❌ إغلاق</button>
+            </div>
+        </div>
+        <div class="print-content" id="captureTarget">
+            <div style="text-align:center; border-bottom:3px double #1a3a5c; margin-bottom:20px;">
+                <h2 style="margin:0; color:#1a3a5c;">عيادة الرحمٰن لطب وجراحة الفم والأسنان</h2>
+                <p>تعز - صبر - حدنان | 771134103</p>
+            </div>
+            <p><strong>اسم المريض:</strong> <span id="patientNameDisp">${r.patientName}</span></p>
+            <div style="padding:15px; background:#f9f9f9; border:2px solid #1a3a5c; font-weight:bold; margin-top:20px;">
+                الرصيد المتبقي: ${r.balance} ريال
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(printDiv);
+}
+
+// الدالة المعدلة التي كانت تسبب الخطأ
+async function downloadAsImage() {
+    const target = document.getElementById('captureTarget');
+    const controls = document.getElementById('printControls');
+
+    if (!target || !controls) {
+        alert("خطأ: لم يتم تحميل عناصر المعاينة بعد!");
+        return;
+    }
+
+    try {
+        controls.style.display = 'none'; // إخفاء الأزرار
+        
+        const canvas = await html2canvas(target, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true
+        });
+
+        const link = document.createElement('a');
+        link.download = `كشف_${document.getElementById('patientNameDisp').innerText}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    } catch (e) {
+        console.error("خطأ في التحويل:", e);
+        alert("فشل إنشاء الصورة، جرب مرة أخرى.");
+    } finally {
+        if (controls) controls.style.display = 'flex'; // إعادة الأزرار
+    }
+}
+
+async function downloadAsImage() {
+    // جلب العناصر والتأكد من وجودها
+    const printContent = document.querySelector('.print-content');
+    const actionButtons = document.querySelector('.no-print');
+    const patientNameDisp = document.getElementById('patientNameDisp');
+
+    // فحص أمني: إذا لم يجد الكود العناصر، سيخرج دون إظهار خطأ style
+    if (!printContent || !actionButtons) {
+        console.error("عذراً، لم يتم العثور على حاوية الطباعة أو أزرار التحكم.");
+        return;
+    }
+
+    // إخفاء الأزرار مؤقتاً (باستخدام فحص الوجود)
+    actionButtons.style.display = 'none';
+
+    try {
+        const canvas = await html2canvas(printContent, {
+            scale: 2,
+            useCORS: true,
+            logging: false
+        });
+
+        const link = document.createElement('a');
+        // جلب اسم المريض إذا وجد، وإلا تسميته باسم افتراضي
+        const name = patientNameDisp ? patientNameDisp.innerText : "مريض";
+        link.download = `كشف_حساب_${name}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    } catch (err) {
+        console.error("حدث خطأ أثناء إنشاء الصورة:", err);
+    } finally {
+        // إعادة إظهار الأزرار دائماً حتى لو فشل التحويل
+        actionButtons.style.display = 'flex';
+    }
+}
 
 </script>
 </body>
