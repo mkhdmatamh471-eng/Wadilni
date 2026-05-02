@@ -900,7 +900,8 @@ async function renderAll(){
       <td>
         <div style="display: flex; gap: 4px;">
           <button class="abt edit" onclick="editRec(${r.id})" title="تعديل">✏️</button>
-<button class="print-btn-close" style="background:#27ae60; margin-left:10px" onclick="downloadAsImage()">📸 حفظ كصورة للطباعة</button>
+<button class="abt" style="background:#27ae60; color:white; border-color:#27ae60;" onclick="printPatientStatement(${r.id})" title="طباعة كشف">🖨️ طباعة</button>
+
 
           <button class="abt" onclick="delRec(${r.id})" title="حذف">🗑️</button>
         </div>
@@ -1382,39 +1383,77 @@ document.addEventListener('click', (e) => {
 
 
 
+// ══════════════════════════════════════════════
+//  PRINT & EXPORT IMAGE SYSTEM (نظام الطباعة المحدث)
+// ══════════════════════════════════════════════
+
 async function printPatientStatement(id) {
     const r = await dbGet(id);
     if (!r) return;
 
-    // 1. إزالة أي نافذة معاينة قديمة لتجنب تكرار الـ IDs
+    // 1. إزالة أي نافذة معاينة سابقة
     const oldArea = document.getElementById('printArea');
     if (oldArea) oldArea.remove();
 
-    // 2. بناء المحتوى (تأكد من إضافة المعرفات ID المطلوبة)
+    // 2. تجهيز جدول الجلسات إذا وجد
+    let sessionsHTML = '';
+    if (r.sessions && r.sessions.length > 0) {
+        sessionsHTML = `
+        <table style="width:100%; border-collapse:collapse; margin-top:20px; font-size:14px;">
+            <tr style="background:#f0f4f8;">
+                <th style="border:1px solid #cdd8e8; padding:10px; text-align:right;">الإجراء الجلسة</th>
+                <th style="border:1px solid #cdd8e8; padding:10px; text-align:center;">التكلفة</th>
+                <th style="border:1px solid #cdd8e8; padding:10px; text-align:center;">المدفوع</th>
+            </tr>
+            ${r.sessions.map(s => `
+            <tr>
+                <td style="border:1px solid #cdd8e8; padding:8px;">${s.desc || '—'}</td>
+                <td style="border:1px solid #cdd8e8; padding:8px; text-align:center;">${s.cost || 0}</td>
+                <td style="border:1px solid #cdd8e8; padding:8px; text-align:center;">${s.paid || 0}</td>
+            </tr>`).join('')}
+        </table>`;
+    }
+
+    // 3. بناء نافذة المعاينة
     const printDiv = document.createElement('div');
     printDiv.id = 'printArea';
     Object.assign(printDiv.style, {
         position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
-        backgroundColor: 'white', zIndex: '999999', direction: 'rtl',
-        padding: '20px', boxSizing: 'border-box', overflowY: 'auto'
+        backgroundColor: 'rgba(0,0,0,0.8)', zIndex: '999999', direction: 'rtl',
+        padding: '20px', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center'
     });
 
     printDiv.innerHTML = `
-        <div class="no-print" id="printControls" style="background:#f0f4f8; padding:10px; margin-bottom:20px; display:flex; justify-content:space-between;">
-            <b style="color:#1a3a5c">معاينة كشف الحساب</b>
-            <div>
-                <button onclick="downloadAsImage()" style="background:#27ae60; color:white; border:none; padding:8px 15px; border-radius:5px;">📸 حفظ كصورة</button>
-                <button onclick="document.getElementById('printArea').remove()" style="background:#e74c3c; color:white; border:none; padding:8px 15px; border-radius:5px; margin-right:5px;">❌ إغلاق</button>
+        <div id="printControls" style="background:#fff; width:100%; max-width:800px; padding:15px; border-radius:10px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <b style="color:#1a3a5c;">خيارات الطباعة لكشف (${r.patientName})</b>
+            <div style="display:flex; gap:10px;">
+                <button onclick="downloadAsImage('${r.patientName}')" style="background:#27ae60; color:white; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold;">📸 حفظ كصورة</button>
+                <button onclick="openNativePrint()" style="background:#2980b9; color:white; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold;">🖨️ طباعة A4</button>
+                <button onclick="document.getElementById('printArea').remove()" style="background:#e74c3c; color:white; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold;">❌ إغلاق</button>
             </div>
         </div>
-        <div class="print-content" id="captureTarget">
-            <div style="text-align:center; border-bottom:3px double #1a3a5c; margin-bottom:20px;">
-                <h2 style="margin:0; color:#1a3a5c;">عيادة الرحمٰن لطب وجراحة الفم والأسنان</h2>
-                <p>تعز - صبر - حدنان | 771134103</p>
+
+        <div id="captureTarget" style="background:white; padding:40px; border-radius:10px; width:100%; max-width:800px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+            <div style="text-align:center; border-bottom:3px double #1a3a5c; margin-bottom:25px; padding-bottom:15px;">
+                <h1 style="margin:0; color:#1a3a5c; font-size:26px;">عيادة الرحمٰن لطب وجراحة الفم والأسنان</h1>
+                <p style="margin:5px 0 0; color:#607080; font-size:15px;">تعز - صبر - مشرعة وحدنان - جوار مجمع السعيد | هاتف: 771134103</p>
             </div>
-            <p><strong>اسم المريض:</strong> <span id="patientNameDisp">${r.patientName}</span></p>
-            <div style="padding:15px; background:#f9f9f9; border:2px solid #1a3a5c; font-weight:bold; margin-top:20px;">
-                الرصيد المتبقي: ${r.balance} ريال
+            
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:20px; font-size:15px; background:#f9fbfc; padding:15px; border-radius:8px; border:1px solid #e1e8f0;">
+                <div><strong>اسم المريض:</strong> ${r.patientName}</div>
+                <div><strong>تاريخ السجل:</strong> ${r.dateStr}</div>
+                <div><strong>التشخيص الرئيسي:</strong> ${r.diagnosis || '—'}</div>
+                <div><strong>حالة المعالجة:</strong> ${r.treatmentStatus || '—'}</div>
+            </div>
+
+            ${sessionsHTML}
+
+            <div style="display:flex; justify-content:space-between; margin-top:30px; border-top:2px solid #1a3a5c; padding-top:20px; font-size:16px;">
+                <div><strong>إجمالي الحساب:</strong> ${r.totalAmount} ريال</div>
+                <div><strong>المبلغ المدفوع:</strong> ${r.paidAmount} ريال</div>
+                <div style="color:${r.balance > 0 ? '#e74c3c' : '#27ae60'}; font-size:18px;">
+                    <strong>الرصيد المتبقي:</strong> ${r.balance} ريال
+                </div>
             </div>
         </div>
     `;
@@ -1422,72 +1461,62 @@ async function printPatientStatement(id) {
     document.body.appendChild(printDiv);
 }
 
-// الدالة المعدلة التي كانت تسبب الخطأ
-async function downloadAsImage() {
+// دالة التحويل لصورة (محدثة ومحمية من الأخطاء)
+async function downloadAsImage(patientName) {
     const target = document.getElementById('captureTarget');
     const controls = document.getElementById('printControls');
 
-    if (!target || !controls) {
-        alert("خطأ: لم يتم تحميل عناصر المعاينة بعد!");
-        return;
-    }
+    if (!target) return;
 
     try {
-        controls.style.display = 'none'; // إخفاء الأزرار
+        controls.style.display = 'none'; // إخفاء لوحة التحكم قبل التصوير
         
         const canvas = await html2canvas(target, {
-            scale: 2,
+            scale: 2, // دقة عالية
             useCORS: true,
-            allowTaint: true
+            backgroundColor: "#ffffff"
         });
 
         const link = document.createElement('a');
-        link.download = `كشف_${document.getElementById('patientNameDisp').innerText}.png`;
+        link.download = `كشف_حساب_${patientName.replace(/\s+/g, '_')}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
+        
+        toast('تم تحميل الصورة بنجاح', 'ok');
     } catch (e) {
-        console.error("خطأ في التحويل:", e);
-        alert("فشل إنشاء الصورة، جرب مرة أخرى.");
+        console.error("خطأ في إنشاء الصورة:", e);
+        alert("حدث خطأ أثناء حفظ الصورة.");
     } finally {
-        if (controls) controls.style.display = 'flex'; // إعادة الأزرار
+        if(controls) controls.style.display = 'flex'; // إعادة لوحة التحكم
     }
 }
 
-async function downloadAsImage() {
-    // جلب العناصر والتأكد من وجودها
-    const printContent = document.querySelector('.print-content');
-    const actionButtons = document.querySelector('.no-print');
-    const patientNameDisp = document.getElementById('patientNameDisp');
-
-    // فحص أمني: إذا لم يجد الكود العناصر، سيخرج دون إظهار خطأ style
-    if (!printContent || !actionButtons) {
-        console.error("عذراً، لم يتم العثور على حاوية الطباعة أو أزرار التحكم.");
-        return;
-    }
-
-    // إخفاء الأزرار مؤقتاً (باستخدام فحص الوجود)
-    actionButtons.style.display = 'none';
-
-    try {
-        const canvas = await html2canvas(printContent, {
-            scale: 2,
-            useCORS: true,
-            logging: false
-        });
-
-        const link = document.createElement('a');
-        // جلب اسم المريض إذا وجد، وإلا تسميته باسم افتراضي
-        const name = patientNameDisp ? patientNameDisp.innerText : "مريض";
-        link.download = `كشف_حساب_${name}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-    } catch (err) {
-        console.error("حدث خطأ أثناء إنشاء الصورة:", err);
-    } finally {
-        // إعادة إظهار الأزرار دائماً حتى لو فشل التحويل
-        actionButtons.style.display = 'flex';
-    }
+// دالة الطباعة المباشرة (حل بديل يفتح نافذة للطباعة عبر المتصفح)
+function openNativePrint() {
+    const content = document.getElementById('captureTarget').innerHTML;
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html dir="rtl">
+            <head>
+                <title>طباعة كشف حساب</title>
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; padding: 20px; color: #000; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                    th, td { border: 1px solid #000; padding: 10px; text-align: right; }
+                    th { background-color: #f0f0f0; }
+                    @media print {
+                        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    }
+                </style>
+            </head>
+            <body onload="setTimeout(function(){ window.print(); window.close(); }, 500);">
+                ${content}
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
 }
+
 
 </script>
 </body>
