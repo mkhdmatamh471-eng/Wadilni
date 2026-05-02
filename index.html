@@ -205,6 +205,36 @@ table.pt tbody tr:hover td{background:#f7f9fc}
   body{background:#fff}
   .stats-grid{grid-template-columns:repeat(4,1fr)}
 }
+
+/* ══ DENTAL CHART ══ */
+.dental-chart { background: #fafcff; border: 2px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 14px; overflow-x: auto; }
+.jaw { display: flex; justify-content: center; gap: 4px; margin-bottom: 10px; min-width: 320px; }
+.jaw.lower { margin-bottom: 0; }
+.tooth { width: 30px; height: 35px; border: 1px solid #b0c4de; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; cursor: pointer; background: #fff; transition: all 0.2s; user-select: none; }
+.tooth:hover { border-color: var(--primary); }
+/* حالات السن */
+.tooth.caries { background: var(--danger); color: #fff; border-color: var(--danger); }
+.tooth.filled { background: var(--primary); color: #fff; border-color: var(--primary); }
+.tooth.extracted { background: #7f8c8d; color: #fff; text-decoration: line-through; border-color: #7f8c8d; }
+.tooth.crown { background: var(--warn); color: #fff; border-color: var(--warn); }
+.chart-legend { display: flex; gap: 10px; justify-content: center; font-size: 0.75rem; margin-top: 10px; flex-wrap: wrap;}
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-color { width: 12px; height: 12px; border-radius: 3px; }
+
+/* ══ SESSIONS ══ */
+.sessions-wrap { border: 2px dashed var(--border); border-radius: 10px; padding: 10px; margin-bottom: 14px; }
+.session-row { display: grid; grid-template-columns: 1fr 100px 100px 30px; gap: 8px; margin-bottom: 8px; align-items: center; background: var(--surface2); padding: 8px; border-radius: 8px;}
+@media(max-width:560px) { .session-row { grid-template-columns: 1fr 1fr; } }
+.session-row input { padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; width: 100%;}
+.btn-add-session { width: 100%; padding: 10px; background: rgba(39,174,96,0.1); color: var(--accent); border: 2px dashed var(--accent); border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+/* ══ X-RAY GALLERY ══ */
+.xray-wrap { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.xray-item { position: relative; width: 80px; height: 80px; border-radius: 8px; overflow: hidden; border: 2px solid var(--border); }
+.xray-item img { width: 100%; height: 100%; object-fit: cover; }
+.xray-item .del-img { position: absolute; top: 2px; right: 2px; background: rgba(231,76,60,0.9); color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; cursor: pointer; }
+.btn-upload { background: var(--primary-l); color: white; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 5px; }
+
 </style>
 </head>
 <body>
@@ -238,6 +268,8 @@ table.pt tbody tr:hover td{background:#f7f9fc}
       <button class="btn-ic" onclick="openPassModal()" title="تغيير كلمة السر">🔑</button>
       <button class="btn-ic" onclick="doLogout()" title="تسجيل خروج">🚪</button>
     </div>
+    <button class="btn-ic" onclick="uploadToCloud()" title="نسخة احتياطية للسحابة" style="background: #4285F4;">☁️</button>
+
   </header>
 
   <nav class="tab-nav">
@@ -289,30 +321,72 @@ table.pt tbody tr:hover td{background:#f7f9fc}
           <input type="text" id="balance" placeholder="0 ريال" readonly>
         </div>
       </div>
+<div class="fld">
+  <label>نوع المعالجة الأساسي (للتقارير)</label>
+  <div class="fw">
+    <select id="diagnosis" style="width: 100%; padding: 11px; border: 2px solid var(--border); border-radius: 10px; font-family: inherit; background: #fafcff;">
+      <option value="">-- اختر نوع المعالجة --</option>
+      <option value="قلع">قلع / خلع أسنان</option>
+      <option value="حشو">حشوات (تجميلية/عادية)</option>
+      <option value="عصب">معالجة لبية (عصب)</option>
+      <option value="تركيب">تركيبات (جسور/تلبيس)</option>
+      <option value="فحص">فحص / تنظيف / أخرى</option>
+    </select>
+  </div>
+</div>
+
+
       <div class="fld">
-        <label>التشخيص والمعالجة</label>
-        <div class="fw" style="align-items:flex-start">
-          <textarea id="diagnosis" placeholder="أدخل التشخيص والمعالجة..."></textarea>
-          <button class="mic top" onclick="startVoice('diagnosis',this)" title="إدخال صوتي">🎤</button>
+        <label>مخطط الأسنان (اضغط لتغيير الحالة)</label>
+        <div class="dental-chart">
+          <div class="jaw upper" id="jawUpper"></div>
+          <div class="jaw lower" id="jawLower"></div>
+          
+          <div class="chart-legend">
+            <div class="legend-item"><div class="legend-color" style="background:#fff;border:1px solid #ccc"></div>سليم</div>
+            <div class="legend-item"><div class="legend-color" style="background:var(--danger)"></div>تسوس</div>
+            <div class="legend-item"><div class="legend-color" style="background:var(--primary)"></div>حشو</div>
+            <div class="legend-item"><div class="legend-color" style="background:#7f8c8d"></div>مخلوع</div>
+            <div class="legend-item"><div class="legend-color" style="background:var(--warn)"></div>تلبيسة</div>
+          </div>
         </div>
       </div>
+
       <div class="fld">
-        <label>ملاحظات إضافية</label>
+        <label>الجلسات العلاجية وتفاصيل الدفع</label>
+        <div class="sessions-wrap">
+          <div id="sessionsContainer"></div>
+          <button type="button" class="btn-add-session" onclick="addSessionRow()">+ إضافة جلسة جديدة</button>
+        </div>
+      </div>
+
+      <div class="fld">
+        <label>صور الأشعة (X-Ray)</label>
+        <div>
+          <button type="button" class="btn-upload" onclick="el('xrayInput').click()">📸 التقاط / إرفاق صورة</button>
+          <input type="file" id="xrayInput" accept="image/*" style="display:none" onchange="handleXRayUpload(event)">
+          <div class="xray-wrap" id="xrayGallery"></div>
+        </div>
+      </div>
+
+  <div class="fld">
+        <label>ملاحظات إضافية (أدوية، تاريخ مرضي)</label>
         <div class="fw" style="align-items:flex-start">
           <textarea id="notes" placeholder="أي ملاحظات أخرى..."></textarea>
           <button class="mic top" onclick="startVoice('notes',this)" title="إدخال صوتي">🎤</button>
         </div>
       </div>
+
       <div class="form-actions">
-        <button class="btn-save" onclick="savePatient()">💾 حفظ السجل</button>
-        <button class="btn-clear" onclick="clearForm()">🗑️ مسح</button>
+        <button class="btn-save" onclick="savePatient()">💾 حفظ بيانات المريض</button>
+        <button class="btn-clear" onclick="clearForm()">🧹 تفريغ الحقول</button>
       </div>
-    </div>
-    <div class="list-card">
+    </div> <div class="list-card" style="margin-top:20px">
       <div class="list-head">🕐 آخر السجلات المضافة</div>
-      <div id="recentList"><div class="empty"><div class="ei">📋</div>لا توجد سجلات بعد</div></div>
-    </div>
-  </div>
+      <div id="recentList"></div> </div>
+  
+
+      </div>
 
   <!-- ─── REPORTS ─── -->
   <div id="reportsTab" class="screen">
@@ -328,6 +402,13 @@ table.pt tbody tr:hover td{background:#f7f9fc}
     </div>
     <div id="rptStats" class="stats-grid"></div>
     <div id="rptTable"></div>
+    <div style="margin-top: 15px; display: flex; gap: 8px; flex-wrap: wrap; background: #eef2f7; padding: 10px; border-radius: 12px;">
+    <span style="width:100%; font-size:0.85rem; font-weight:bold; color:var(--primary); margin-bottom:5px">🔍 تقارير نوع الحالات (قلع/عصب/حشو):</span>
+    <button class="rpt-btn" style="background:#fff" onclick="generateDetailedReport('week')">تقرير أسبوعي تفصيلي</button>
+    <button class="rpt-btn" style="background:#fff" onclick="generateDetailedReport('month')">تقرير شهري تفصيلي</button>
+    <button class="rpt-btn" style="background:#fff" onclick="generateDetailedReport('year')">تقرير سنوي تفصيلي</button>
+</div>
+
   </div>
 
   <!-- ─── RECORDS ─── -->
@@ -510,16 +591,35 @@ function calcBal(){
   el('balance').value = fmtN(t - p) + ' ريال';
 }
 function clearForm(){
-  ['patientName','phone','totalAmount','paidAmount','balance','diagnosis','notes','editId']
+  ['patientName','phone','totalAmount','paidAmount','balance','notes','editId']
     .forEach(id => el(id).value = '');
+  el('sessionsContainer').innerHTML = '';
+  currentTeeth = {};
+  currentXRays = [];
+  renderDentalChart();
+  renderXRays();
+  
+  const oldNotice = el('debtNotice');
+  if (oldNotice) oldNotice.remove();
+
 }
+
 async function savePatient(){
   const name = (el('patientName').value||'').trim();
   if(!name){ toast('يرجى إدخال اسم المريض','err'); return; }
+  
   const total = parseFloat(el('totalAmount').value)||0;
   const paid  = parseFloat(el('paidAmount').value)||0;
   const eid   = el('editId').value;
   const now   = new Date();
+
+  // جمع بيانات الجلسات من الواجهة
+  const sessions = Array.from(qsa('.session-row')).map(row => ({
+    desc: row.querySelector('.sess-desc').value.trim(),
+    cost: parseFloat(row.querySelector('.sess-cost').value) || 0,
+    paid: parseFloat(row.querySelector('.sess-paid').value) || 0
+  }));
+
   const rec = {
     patientName : name,
     phone       : el('phone').value.trim(),
@@ -529,36 +629,94 @@ async function savePatient(){
     diagnosis   : el('diagnosis').value.trim(),
     notes       : el('notes').value.trim(),
     date        : now.toISOString(),
-    dateStr     : fmtDate(now)
+    dateStr     : fmtDate(now),
+    teethData   : currentTeeth, // الميزة الجديدة
+    sessions    : sessions,     // الميزة الجديدة
+    xrays       : currentXRays  // الميزة الجديدة
   };
+  
   try{
-    if(eid){ rec.id = parseInt(eid); await dbPut(rec); toast('تم تحديث السجل بنجاح','ok'); }
+    if(eid){ rec.id = parseInt(eid); await dbPut(rec); toast('تم تحديث السجل','ok'); }
     else   { await dbAdd(rec); toast('تم حفظ السجل بنجاح','ok'); }
     clearForm();
     renderRecent();
-  } catch(e){ toast('خطأ في الحفظ','err'); }
+  } catch(e){ console.error(e); toast('خطأ في الحفظ','err'); }
 }
-async function editRec(id){
-  const r = await dbGet(id); if(!r) return;
+
+async function editRec(id) {
+  const r = await dbGet(id); 
+  if (!r) return;
+
+  // 1. تعبئة الحقول الأساسية
   el('editId').value      = r.id;
-  el('patientName').value = r.patientName||'';
-  el('phone').value       = r.phone||'';
-  el('totalAmount').value = r.totalAmount||'';
-  el('paidAmount').value  = r.paidAmount||'';
-  el('diagnosis').value   = r.diagnosis||'';
-  el('notes').value       = r.notes||'';
+  el('patientName').value = r.patientName || '';
+  el('phone').value       = r.phone || '';
+  el('totalAmount').value = r.totalAmount || '';
+  el('paidAmount').value  = r.paidAmount || '';
+  el('diagnosis').value   = r.diagnosis || '';
+  el('notes').value       = r.notes || '';
+
+  // 2. استرجاع البيانات المتقدمة (الأسنان والأشعة)
+  currentTeeth = r.teethData || {};
+  renderDentalChart();
+  
+  currentXRays = r.xrays || [];
+  renderXRays();
+
+  // 3. منطق تنبيه الديون (Safety Alert)
+  const oldNotice = el('debtNotice');
+  if (oldNotice) oldNotice.remove(); // إزالة أي تنبيه سابق أولاً
+
+  if (r.balance > 0) {
+    const alertDiv = document.createElement('div');
+    alertDiv.id = "debtNotice";
+    // الستايل مع أنيميشن النبض لجذب الانتباه
+    alertDiv.style = `
+      background: #e74c3c; 
+      color: white; 
+      padding: 15px; 
+      border-radius: 10px; 
+      margin-bottom: 15px; 
+      text-align: center; 
+      font-weight: bold; 
+      animation: pulseR 1s infinite; 
+      border: 2px solid #fff;
+      box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+    `;
+    alertDiv.innerHTML = `⚠️ تنبيه مالي: هذا المريض عليه مبلغ متبقي قدره (${fmtN(r.balance)}) ريال`;
+    el('dashboardTab').prepend(alertDiv);
+  }
+
+  // 4. استرجاع الجلسات
+  el('sessionsContainer').innerHTML = '';
+  if (r.sessions) {
+    r.sessions.forEach(s => addSessionRow('', s.desc, s.cost, s.paid));
+  }
+
+  // 5. تحديث الحسابات والواجهة
   calcBal();
   showTab('dashboard');
-  window.scrollTo(0,0);
+  window.scrollTo({ top: 0, behavior: 'smooth' }); // تمرير سلس للأعلى
 }
+
 async function delRec(id){
-  if(!confirm('هل تريد حذف هذا السجل نهائياً؟')) return;
-  await dbDel(id);
-  toast('تم الحذف');
-  renderRecent();
-  if(curTab==='records') renderAll();
-  if(curTab==='reports') renderReport();
+  // طلب كلمة السر للتأكد
+  const confirmPass = prompt("هذا الإجراء يتطلب صلاحية الإدارة. يرجى إدخال كلمة السر للحذف:");
+  
+  if (confirmPass === null) return; // إلغاء العملية
+  
+  if (confirmPass === getCreds().pass) {
+      if(!confirm('هل أنت متأكد من حذف هذا السجل نهائياً؟')) return;
+      await dbDel(id);
+      toast('تم الحذف بنجاح');
+      renderRecent();
+      if(curTab==='records') renderAll();
+      if(curTab==='reports') renderReport();
+  } else {
+      toast('كلمة السر غير صحيحة! لا يمكن الحذف', 'err');
+  }
 }
+
 
 // ══════════════════════════════════════════════
 //  RECENT LIST
@@ -763,6 +921,190 @@ async function refreshAll(){ await renderRecent(); }
     await refreshAll();
   }
 })();
+// ══════════════════════════════════════════════
+//  NEW FEATURES: DENTAL CHART, SESSIONS, X-RAYS
+// ══════════════════════════════════════════════
+
+// متغيرات عامة للتخزين المؤقت في الواجهة
+let currentTeeth = {}; // يخزن حالة كل سن { '18': 'caries', '21': 'filled' }
+let currentXRays = []; // يخزن صور الأشعة بصيغة Base64
+
+// 1. بناء مخطط الأسنان
+const upperTeeth = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28];
+const lowerTeeth = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38];
+const states = ['sound', 'caries', 'filled', 'extracted', 'crown'];
+
+function renderDentalChart() {
+  const buildJaw = (teethArr, containerId) => {
+    const cont = el(containerId);
+    cont.innerHTML = '';
+    teethArr.forEach(num => {
+      const t = document.createElement('div');
+      t.className = `tooth ${currentTeeth[num] || 'sound'}`;
+      t.textContent = num;
+      t.onclick = () => {
+        let currState = currentTeeth[num] || 'sound';
+        let nextIndex = (states.indexOf(currState) + 1) % states.length;
+        currentTeeth[num] = states[nextIndex];
+        t.className = `tooth ${states[nextIndex]}`;
+      };
+      cont.appendChild(t);
+    });
+  };
+  buildJaw(upperTeeth, 'jawUpper');
+  buildJaw(lowerTeeth, 'jawLower');
+}
+
+// 2. إدارة الجلسات
+function addSessionRow(date='', desc='', cost='', paid='') {
+  const cont = el('sessionsContainer');
+  const div = document.createElement('div');
+  div.className = 'session-row';
+  div.innerHTML = `
+    <input type="text" class="sess-desc" placeholder="الإجراء (مثال: سحب عصب)" value="${desc}">
+    <input type="number" class="sess-cost" placeholder="التكلفة" value="${cost}" oninput="calcSessionTotals()">
+    <input type="number" class="sess-paid" placeholder="المدفوع" value="${paid}" oninput="calcSessionTotals()">
+    <button class="abt" onclick="this.parentElement.remove(); calcSessionTotals()">❌</button>
+  `;
+  cont.appendChild(div);
+}
+
+// حساب المجموع التلقائي من الجلسات وتحديث الحقول الأساسية
+function calcSessionTotals() {
+  let total = 0, paid = 0;
+  qsa('.session-row').forEach(row => {
+    total += parseFloat(row.querySelector('.sess-cost').value) || 0;
+    paid += parseFloat(row.querySelector('.sess-paid').value) || 0;
+  });
+  el('totalAmount').value = total;
+  el('paidAmount').value = paid;
+  calcBal(); // دالة حساب المتبقي الموجودة مسبقاً
+}
+
+// 3. معالجة صور الأشعة
+function handleXRayUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const base64Data = e.target.result;
+    currentXRays.push(base64Data);
+    renderXRays();
+  };
+  // ضغط الصورة (تقليل الجودة قليلاً لتناسب قواعد البيانات المحلية)
+  reader.readAsDataURL(file); 
+}
+
+function renderXRays() {
+  const gal = el('xrayGallery');
+  gal.innerHTML = currentXRays.map((imgStr, i) => `
+    <div class="xray-item">
+      <img src="${imgStr}" onclick="window.open('${imgStr}')">
+      <button class="del-img" onclick="removeXRay(${i})">X</button>
+    </div>
+  `).join('');
+}
+
+function removeXRay(index) {
+  currentXRays.splice(index, 1);
+  renderXRays();
+}
+
+// تهيئة المخطط عند التحميل
+window.addEventListener('DOMContentLoaded', () => {
+  renderDentalChart();
+});
+async function uploadToCloud() {
+    const allData = await dbAll();
+    const fileName = `Rahman_Clinic_Backup_${new Date().toISOString().slice(0,10)}.json`;
+    const content = JSON.stringify(allData);
+
+    // الطريقة الأسهل يدوياً (فتح Google Drive للرفع المباشر)
+    if(confirm("سيتم الآن تجهيز الملف. يرجى اختيار 'Save to Drive' من قائمة المشاركة بعد التحميل.")) {
+        const blob = new Blob([content], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        
+        // توجيه المستخدم لفتح الدرايف للرفع
+        setTimeout(() => {
+            if(confirm("هل تريد فتح Google Drive الآن لرفع الملف؟")) {
+                window.open('https://drive.google.com/drive/u/0/my-drive', '_blank');
+            }
+        }, 2000);
+    }
+}
+
+// دالة تحليل الإجراءات وتوليد التقارير التفصيلية
+async function generateDetailedReport(period) {
+    const all = await dbAll();
+    const now = new Date();
+    
+    // 1. فلترة البيانات حسب الفترة الزمنية
+    const filtered = all.filter(r => {
+        const d = new Date(r.date);
+        if (period === 'week') {
+            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            return d >= weekAgo;
+        }
+        if (period === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        if (period === 'year') return d.getFullYear() === now.getFullYear();
+        return true;
+    });
+
+    // 2. الكلمات المفتاحية للبحث في التشخيص
+    const categories = {
+        'قلع': ['قلع', 'خلع', 'extraction'],
+        'حشو': ['حشو', 'حشوة', 'filling', 'ترمِيم'],
+        'عصب': ['عصب', 'سحب', 'endo', 'nerve'],
+        'تركيب': ['تركيب', 'جسر', 'تلبيس', 'تاج', 'crown', 'bridge']
+    };
+
+    let reportHTML = `<h3>📊 تقرير تفصيلي (${period === 'week' ? 'أسبوعي' : period === 'month' ? 'شهري' : 'سنوي'})</h3>`;
+    
+    // 3. تصنيف الحالات واستخراج التفاصيل
+    for (const [catName, keywords] of Object.entries(categories)) {
+        const matches = filtered.filter(r => 
+            keywords.some(k => (r.diagnosis || '').toLowerCase().includes(k))
+        );
+
+        const totalCatMoney = matches.reduce((s, r) => s + (r.totalAmount || 0), 0);
+
+        reportHTML += `
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:15px; overflow:hidden">
+                <div style="background:var(--primary); color:white; padding:10px 15px; display:flex; justify-content:space-between">
+                    <strong>حالات ${catName}</strong>
+                    <span>العدد: ${matches.length} | الإجمالي: ${fmtN(totalCatMoney)} ر</span>
+                </div>
+                <table style="width:100%; font-size:0.8rem; border-collapse:collapse;">
+                    <thead style="background:#f9f9f9">
+                        <tr>
+                            <th style="padding:5px; border-bottom:1px solid #eee">الاسم</th>
+                            <th style="padding:5px; border-bottom:1px solid #eee">التاريخ</th>
+                            <th style="padding:5px; border-bottom:1px solid #eee">المبلغ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${matches.length > 0 ? matches.map(m => `
+                            <tr>
+                                <td style="padding:5px; border-bottom:1px solid #eee">${m.patientName}</td>
+                                <td style="padding:5px; border-bottom:1px solid #eee">${m.dateStr}</td>
+                                <td style="padding:5px; border-bottom:1px solid #eee">${fmtN(m.totalAmount)}</td>
+                            </tr>
+                        `).join('') : '<tr><td colspan="3" style="text-align:center; padding:10px; color:#999">لا توجد حالات</td></tr>'}
+                    </tbody>
+                </table>
+            </div>`;
+    }
+
+    // عرض النتيجة في منطقة التقارير
+    el('rptTable').innerHTML = reportHTML;
+    window.scrollTo({ top: el('rptTable').offsetTop - 100, behavior: 'smooth' });
+}
+
 </script>
 </body>
 </html>
