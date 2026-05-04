@@ -970,31 +970,27 @@ function sendEmergencySOS() {
     const msg = input.value.trim();
     if (!msg) return;
 
-    // إضافة رسالة المستخدم للواجهة
     chatBody.innerHTML += `<div class="chat-msg user-msg">${msg}</div>`;
     input.value = '';
     input.disabled = true;
     chatBody.scrollTop = chatBody.scrollHeight;
 
-    // تجهيز مؤشر الانتظار
     const typingId = "typing-" + Date.now();
     chatBody.innerHTML += `<div class="chat-msg bot-msg" id="${typingId}"><i class="fas fa-spinner fa-spin"></i> جاري التفكير...</div>`;
     
-    // --- منطق حالة العيادة الذكي ---
-    const currentHour = new Date().getHours();
-    // الدوام: 8ص-1ظ و 4عصرًا-9م
-    const isClinicOpen = (currentHour >= 8 && currentHour < 13) || (currentHour >= 16 && currentHour < 21);
-    const clinicStatus = isClinicOpen ? "العيادة مفتوحة حالياً وتستقبل المرضى." : "العيادة مغلقة حالياً، ولكن يمكنك حجز موعد عبر النموذج أسفل الصفحة ليوم غد.";
+    const hour = new Date().getHours();
+    const isOpen = (hour >= 8 && hour < 13) || (hour >= 16 && hour < 20);
+    const status = isOpen ? "مفتوح" : "مغلق";
 
+    // تم تشديد القيود هنا لمنع الإجابات الجانبية
     const systemPrompt = `
-أنت مساعد عيادة د.معاذ سلطان (د. معاذ سلطان). الحالة: ${clinicStatus}.
-الدوام: (8ص-12ظ)، (4ع-8م).
-التعليمات: الفصحى، الاختصار الشديد (أقل من 15 كلمة)، حث المريض حصراً على ملء نموذج الحجز في "أسفل الصفحة".
-البيانات: الموقع (تعز-حدنان)، التخصص (زراعة، تقويم، تركيبات، جراحة).
-ممنوع: التشخيص، الأدوية، أو أي حديث خارج التخصص.
+أنت مساعد آلي حصري لعيادة د.معاذ سلطان فقط.
+البيانات: الرقم (771459740)، الموقع (تعز-التحرير الأعلى-شارع الخياطين)، التخصص (تجميل وجراحة الأسنان).
+القاعدة الصارمة: ممنوع الإجابة على أي سؤال خارج خدمات العيادة (لا تجب عن معلومات عامة، طبخ، أخبار، أو غيرها).
+إذا سألك عن شيء خارج التخصص، رد بـ: "عذراً، أنا هنا للمساعدة في استفسارات عيادة د. معاذ سلطان فقط."
+الاختصار: ردودك لا تتجاوز 15 كلمة.
 `;
 
-    // مفتاح API (مقسم للأمان)
     const p1 = "gsk_emKf0CkNg9RaiF";
     const p2 = "SxbDBYWGdyb3FYbmv3jYs";
     const p3 = "KnN7wxrGyU2mZi";
@@ -1013,7 +1009,9 @@ function sendEmergencySOS() {
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: msg }
-                ]
+                ],
+                max_tokens: 50,
+                temperature: 0.1 // تقليل الحرارة لضمان عدم "الهذرة" أو الإجابات الإبداعية الجانبية
             })
         });
         
@@ -1022,7 +1020,7 @@ function sendEmergencySOS() {
         document.getElementById(typingId).innerText = botResponse;
         
     } catch (error) {
-        document.getElementById(typingId).innerText = "عذراً، حدث خطأ في الاتصال. يرجى المحاولة لاحقاً.";
+        document.getElementById(typingId).innerText = "للاستفسار تواصل بنا: 771459740";
     } finally {
         input.disabled = false;
         input.focus();
