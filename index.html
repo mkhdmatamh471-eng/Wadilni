@@ -1108,9 +1108,13 @@ function closeAdminPanel() {
     document.getElementById('admin-panel').style.display = 'none';
 }
 
+// 1. تحديث دالة التحقق من كلمة السر لتدعم القيمة المخزنة أو الافتراضية
 function checkAdminPass() {
-    const pass = document.getElementById('admin-pass').value;
-    if(pass === "1234") { // يمكنك تغيير الرمز هنا
+    const inputPass = document.getElementById('admin-pass').value;
+    // جلب كلمة السر من التخزين المحلي، إذا لم توجد نستخدم الافتراضية "1234"
+    const savedPass = localStorage.getItem('clinic_admin_password') || "1234";
+
+    if(inputPass === savedPass) {
         document.getElementById('login-section').style.display = 'none';
         document.getElementById('bookings-list').style.display = 'block';
         displayBookings();
@@ -1118,6 +1122,30 @@ function checkAdminPass() {
         alert("رمز الدخول خاطئ!");
     }
 }
+
+// 2. دالة لإظهار/إخفاء قسم تغيير كلمة السر
+function togglePasswordSection() {
+    const sec = document.getElementById('password-change-section');
+    sec.style.display = (sec.style.display === 'none') ? 'block' : 'none';
+}
+
+// 3. دالة حفظ كلمة السر الجديدة
+function updateAdminPassword() {
+    const newPass = document.getElementById('new-admin-pass').value;
+    
+    if(newPass.length < 4) {
+        alert("يرجى إدخال كلمة مرور قوية (4 رموز على الأقل)");
+        return;
+    }
+
+    if(confirm("هل أنت متأكد من تغيير كلمة مرور لوحة الإدارة؟")) {
+        localStorage.setItem('clinic_admin_password', newPass);
+        alert("تم تحديث كلمة المرور بنجاح! سيتم استخدامها في تسجيل دخولك القادم.");
+        togglePasswordSection();
+        document.getElementById('new-admin-pass').value = '';
+    }
+}
+
 
 function displayBookings() {
     const bookings = JSON.parse(localStorage.getItem('clinic_bookings') || '[]');
@@ -1305,6 +1333,20 @@ function copyAcc(num) {
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
         <h3>قائمة الحجوزات الحالية</h3>
         <button onclick="window.print()" class="btn-submit" style="padding: 5px 15px; background: #333;">طباعة الكشف كامل</button>
+        <div style="margin-top: 20px; padding-top: 15px; border-top: 2px solid #eee;">
+    <button onclick="togglePasswordSection()" style="background: #666; color: white; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer;">
+        <i class="fas fa-key"></i> تغيير كلمة المرور
+    </button>
+</div>
+
+<div id="password-change-section" style="display: none; margin-top: 15px; padding: 15px; background: #f9f9f9; border-radius: 10px; border: 1px solid #ddd;">
+    <h4>تحديث كلمة مرور الإدارة</h4>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <input type="password" id="new-admin-pass" placeholder="كلمة المرور الجديدة" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+        <button onclick="updateAdminPassword()" style="background: #2ecc71; color: white; border: none; padding: 8px 20px; border-radius: 8px; cursor: pointer;">حفظ التغيير</button>
+    </div>
+</div>
+
     </div>
     <table style="width: 100%; border-collapse: collapse; text-align: right;">
         <thead>
